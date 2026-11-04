@@ -20,25 +20,28 @@ Transforma a SmallTV na **NOC Cyber Girl — Close-Up Anime (Super Expressiva)**
 ### 2. Cérebro Neural Autônomo + Login OAuth PKCE 1-Clique
 - **Pensamentos Espontâneos Contextualizados:** periodicamente (ou com 1 clique na Web UI), o próprio ESP8266 consulta o LLM enviando horário NTP, temperatura externa ao vivo (`Open-Meteo`) e estado dos hosts do NOC (`Zabbix` / `Watchdog`), recebendo a frase e o humor em JSON (`~45 tokens` por chamada).
 - **6 Provedores Neurais Suportados Direto no ESP8266 (`BearSSL`):**
-  - `0` — **NVIDIA NIM (`nvidia/nemotron-3.5-super-vl-120b-a12b`)**: mesmo motor do Hermes Wazuh, pré-configurado de fábrica com `enable_thinking: false` para respostas instantâneas.
-  - `1` — **Hermes Bot Gateway (`http://172.1.0.32:9119` / `172.17.0.40`)**: ponte HTTP direta com fallback automático para NVIDIA NIM.
+  - `0` — **NVIDIA NIM (`nvidia/nemotron-3.5-super-vl-120b-a12b`)**: configurado com `enable_thinking: false` para respostas instantâneas.
+  - `1` — **Universal Hermes Agent (`http://` ou `https://`)**: conecta-se a **qualquer instância do Hermes Agent** (Nous Research `hermes-agent`, servidor OpenAI-compatible `/v1/chat/completions` ou endpoint REST/Webhook customizado em qualquer IP/hostname/porta), com autenticação Bearer opcional e fallback inteligente.
   - `2` — **OpenRouter (Com Botão `🔗 Conectar via OAuth 1-Clique` na Web UI)**: fluxo OAuth PKCE completo direto no navegador!
   - `3` — **OpenAI Oficial (`gpt-4o-mini`)**
   - `4` — **Google Gemini (`gemini-2.0-flash` / `gemini-flash-lite-latest`)**
   - `5` — **Groq Cloud (`llama-3.3-70b-versatile`)**
 
-### 3. Integração Bidirecional com o Hermes Bot (`/api/hermes/webhook`)
-O seu **Hermes Agent** (rodando no Proxmox LXC 100 `172.1.0.32` ou no servidor Wazuh `172.17.0.40`) pode enviar alertas e conversar com a NOC Cyber Girl na sua mesa usando o endpoint `/api/hermes/webhook` ou o script [`scripts/hermes_dhexterbot_bridge.py`](scripts/hermes_dhexterbot_bridge.py):
+### 3. Protocolo Universal para Qualquer Hermes Agent (`/api/hermes` & `/api/hermes/webhook`)
+Qualquer instância do **Hermes Agent** em qualquer servidor, container ou máquina pode descobrir as capacidades da DhexterBot via `GET /api/hermes` e controlar a NOC Cyber Girl via `POST /api/hermes/webhook` ou importando a Skill Universal [`scripts/hermes_dhexterbot_bridge.py`](scripts/hermes_dhexterbot_bridge.py):
 
 ```bash
-# 1. Notificar nova vaga remota encontrada pelo Hermes Job Hunter:
-python scripts/hermes_dhexterbot_bridge.py --event job_found --msg "Hermes: 2 vagas Sr Remotas salvas no Notion!"
+# 1. Descoberta automática de Schema & Status (GET /api/hermes):
+python scripts/hermes_dhexterbot_bridge.py --host 10.0.15.235 --status
 
-# 2. Enviar alerta de segurança do Wazuh SIEM:
-python scripts/hermes_dhexterbot_bridge.py --event wazuh_alert --msg "Wazuh SIEM: Alerta nivel 12 detectado!" --alerts 1
+# 2. Notificar conclusão de tarefa de qualquer Hermes Agent:
+python scripts/hermes_dhexterbot_bridge.py --host 10.0.15.235 --event success --msg "Hermes: Tarefa concluida com sucesso!"
 
-# 3. Fazer o Hermes conversar com o Cérebro Neural da SmallTV:
-python scripts/hermes_dhexterbot_bridge.py --event ask --msg "Como estao os switches Aruba e links WAN?"
+# 3. Enviar alerta crítico (fones piscam em vermelho + expressão de alerta):
+python scripts/hermes_dhexterbot_bridge.py --host 10.0.15.235 --event alert --msg "Hermes: Anomalia critica detectada!" --alerts 1
+
+# 4. Fazer qualquer Hermes conversar com o Cérebro Neural da SmallTV:
+python scripts/hermes_dhexterbot_bridge.py --host 10.0.15.235 --event ask --msg "Como estao os sistemas hoje?"
 ```
 
 ---

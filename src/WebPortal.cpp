@@ -389,26 +389,61 @@ static void handleAiChat() {
   sendJson(res);
 }
 
-// External Webhook for Hermes Bot (Proxmox LXC 100 / Wazuh SOC / Telegram Bridge)
+// Universal Hermes Agent Endpoint (/api/hermes/webhook & /api/hermes)
 static void handleHermesWebhook() {
+  // If called via GET without action parameters, return the Universal Hermes Tool Manifest & Live Status
+  if (server.method() == HTTP_GET && !server.hasArg("event") && !server.hasArg("msg") && !server.hasArg("message")) {
+    JsonDocument manifest;
+    manifest["ok"]                = true;
+    manifest["agent"]             = "DhexterBot-NOC-CyberGirl";
+    manifest["protocol"]          = "hermes-universal-v1";
+    manifest["mood"]              = petMoodName(g_petMode.currentMood());
+    manifest["speech"]            = g_petMode.currentSpeech();
+    manifest["lastAiReply"]       = g_petMode.lastAiReply();
+    manifest["hermesEventsCount"] = g_petMode.hermesEventsCount();
+    manifest["aiThoughtsCount"]   = g_petMode.aiThoughtsCount();
+    manifest["zbxProblems"]       = g_petMode.zbxProblems();
+    if (g_petMode.weatherValid()) {
+      manifest["weatherTempC"] = g_petMode.weatherTemp();
+    }
+    JsonObject schema = manifest["schema"].to<JsonObject>();
+    schema["endpoint"] = "/api/hermes/webhook";
+    schema["methods"]  = "GET, POST";
+    schema["fields"]   = "event (notify|ask|alert|success|ok), message/say/text/content/output, mood (happy|excited|cyber|cool|curious|angry|love|normal|sleep), action (coffee|pet|charge|hacker|celebrate), alerts (int)";
+    sendJson(manifest);
+    return;
+  }
+
   String eventType = server.arg("event");
   String message   = server.arg("msg");
+  if (!message.length()) message = server.arg("message");
   String moodStr   = server.arg("mood");
+  String actionStr = server.arg("action");
   int alertCount   = server.hasArg("alerts") ? server.arg("alerts").toInt() : -1;
 
   if (server.hasArg("plain") && server.arg("plain").length() > 0) {
     JsonDocument doc;
     if (!deserializeJson(doc, server.arg("plain"))) {
-      if (doc["event"].is<const char*>())   eventType = doc["event"].as<const char*>();
-      if (doc["message"].is<const char*>()) message   = doc["message"].as<const char*>();
-      else if (doc["say"].is<const char*>()) message  = doc["say"].as<const char*>();
-      if (doc["mood"].is<const char*>())    moodStr   = doc["mood"].as<const char*>();
-      if (doc["alerts"].is<int>())          alertCount = doc["alerts"].as<int>();
+      if (doc["event"].is<const char*>())        eventType = doc["event"].as<const char*>();
+      else if (doc["type"].is<const char*>())    eventType = doc["type"].as<const char*>();
+      if (doc["message"].is<const char*>())      message   = doc["message"].as<const char*>();
+      else if (doc["say"].is<const char*>())     message   = doc["say"].as<const char*>();
+      else if (doc["text"].is<const char*>())    message   = doc["text"].as<const char*>();
+      else if (doc["content"].is<const char*>()) message   = doc["content"].as<const char*>();
+      else if (doc["reply"].is<const char*>())   message   = doc["reply"].as<const char*>();
+      else if (doc["output"].is<const char*>())  message   = doc["output"].as<const char*>();
+      if (doc["mood"].is<const char*>())         moodStr   = doc["mood"].as<const char*>();
+      if (doc["action"].is<const char*>())       actionStr = doc["action"].as<const char*>();
+      if (doc["alerts"].is<int>())               alertCount = doc["alerts"].as<int>();
     }
   }
 
+  if (actionStr.length() > 0) {
+    g_petMode.triggerAction(petActionFromStr(actionStr.c_str()), 12);
+  }
+
   bool ok = true;
-  if (eventType.equalsIgnoreCase("ask") && message.length() > 0) {
+  if ((eventType.equalsIgnoreCase("ask") || eventType.equalsIgnoreCase("chat")) && message.length() > 0) {
     ok = g_petMode.triggerNeuralThought(*S, message.c_str(), "HERMES AI");
   } else {
     g_petMode.pushHermesEvent(eventType.c_str(), message.c_str(), moodStr.c_str(), alertCount);
@@ -525,6 +560,8 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/ai/chat", HTTP_POST, handleAiChat);
   server.on("/api/hermes/webhook", HTTP_GET, handleHermesWebhook);
   server.on("/api/hermes/webhook", HTTP_POST, handleHermesWebhook);
+  server.on("/api/hermes", HTTP_GET, handleHermesWebhook);
+  server.on("/api/hermes", HTTP_POST, handleHermesWebhook);
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/factory", HTTP_POST, handleFactory);

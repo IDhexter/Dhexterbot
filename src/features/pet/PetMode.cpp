@@ -289,14 +289,23 @@ void PetMode::pushHermesEvent(const char* eventType, const char* message, const 
     m = petMoodFromStr(moodStr);
   } else if (eventType) {
     String ev(eventType);
-    if (ev.equalsIgnoreCase("wazuh_alert") || ev.equalsIgnoreCase("alert")) m = PET_MOOD_ANGRY;
-    else if (ev.equalsIgnoreCase("job_found") || ev.equalsIgnoreCase("vaga")) m = PET_MOOD_EXCITED;
-    else if (ev.equalsIgnoreCase("zabbix_ok") || ev.equalsIgnoreCase("happy")) m = PET_MOOD_HAPPY;
+    if (ev.equalsIgnoreCase("alert") || ev.equalsIgnoreCase("critical") || ev.equalsIgnoreCase("error") || ev.equalsIgnoreCase("danger")) {
+      m = PET_MOOD_ANGRY;
+    } else if (ev.equalsIgnoreCase("success") || ev.equalsIgnoreCase("task_done") || ev.equalsIgnoreCase("excited") || ev.equalsIgnoreCase("celebrate")) {
+      m = PET_MOOD_EXCITED;
+      triggerAction(PET_ACT_CELEBRATE, 8);
+    } else if (ev.equalsIgnoreCase("ok") || ev.equalsIgnoreCase("recovery") || ev.equalsIgnoreCase("happy")) {
+      m = PET_MOOD_HAPPY;
+    } else if (ev.equalsIgnoreCase("cool")) {
+      m = PET_MOOD_COOL;
+    } else if (ev.equalsIgnoreCase("curious") || ev.equalsIgnoreCase("thinking")) {
+      m = PET_MOOD_CURIOUS;
+    }
   }
 
-  const char* msg = (message && message[0]) ? message : "Hermes Bot sincronizado com sucesso!";
+  const char* msg = (message && message[0]) ? message : "Hermes Agent conectado e sincronizado!";
   strlcpy(_lastAiReply, msg, sizeof(_lastAiReply));
-  triggerSay(msg, m, 40, "HERMES BOT");
+  triggerSay(msg, m, 40, "HERMES AI");
   _hudDirty    = true;
   _footerDirty = true;
 }
@@ -348,37 +357,103 @@ bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, 
   JsonDocument reqDoc;
   uint8_t prov = s.pet.aiProvider;
 
-  // If provider 1 (Hermes Gateway HTTP) is selected, try calling Hermes Gateway first; if unreachable, fall back to NVIDIA NIM (0)
+  // If provider 1 (Universal Hermes Agent Gateway — OpenAI-compatible or REST/Webhook) is selected
   if (prov == 1 && s.pet.hermesUrl[0]) {
-    WiFiClient client;
+    String hUrl = String(s.pet.hermesUrl);
+    hUrl.trim();
+    // Auto-normalize URL: if it ends with /v1, append /chat/completions; if bare host:port, append /v1/chat/completions
+    if (hUrl.endsWith("/v1")) {
+      hUrl += "/chat/completions";
+    } else if (hUrl.endsWith("/v1/")) {
+      hUrl += "chat/completions";
+    } else {
+      int schemeIdx = hUrl.indexOf("://");
+      int slashIdx  = hUrl.indexOf('/', schemeIdx >= 0 ? schemeIdx + 3 : 0);
+      if (slashIdx < 0) {
+        hUrl += "/v1/chat/completions";
+      } else if (slashIdx == (int)hUrl.length() - 1) {
+        hUrl += "v1/chat/completions";
+      }
+    }
+
+    reqDoc["model"]    = s.pet.aiModel[0] ? s.pet.aiModel : "hermes-agent";
+    reqDoc["message"]  = promptBuf;
+    reqDoc["prompt"]   = promptBuf;
+    reqDoc["max_tokens"] = 90;
+    JsonArray hMsgs = reqDoc["messages"].to<JsonArray>();
+    JsonObject hm0 = hMsgs.add<JsonObject>();
+    hm0["role"]    = "user";
+    hm0["content"] = promptBuf;
+
+    String body;
+    serializeJson(reqDoc, body);
+    reqDoc.clear();
+
     HTTPClient http;
-    http.setTimeout(3000);
-    String url = String(s.pet.hermesUrl);
-    if (!url.endsWith("/api/chat")) url += "/api/chat";
-    if (http.begin(client, url)) {
+    http.setTimeout(5000);
+    bool begun = false;
+#if defined(SMALLTV_ESP8266)
+    std::unique_ptr<BearSSL::WiFiClientSecure> hSec;
+#else
+    std::unique_ptr<WiFiClientSecure> hSec;
+#endif
+    WiFiClient hPlain;
+
+    if (hUrl.startsWith("https://")) {
+#if defined(SMALLTV_ESP8266)
+      hSec.reset(new BearSSL::WiFiClientSecure());
+      hSec->setInsecure();
+      hSec->setBufferSizes(1024, 512);
+#else
+      hSec.reset(new WiFiClientSecure());
+      hSec->setInsecure();
+#endif
+      begun = http.begin(*hSec, hUrl);
+    } else {
+      begun = http.begin(hPlain, hUrl);
+    }
+
+    if (begun) {
       http.addHeader("Content-Type", "application/json");
-      reqDoc["message"] = promptBuf;
-      String body;
-      serializeJson(reqDoc, body);
+      if (s.pet.aiKey[0]) {
+        http.addHeader("Authorization", String("Bearer ") + s.pet.aiKey);
+        http.addHeader("X-API-Key", s.pet.aiKey);
+      }
       int code = http.POST(body);
       if (code == 200) {
         String resp = http.getString();
         http.end();
         JsonDocument resDoc;
         if (!deserializeJson(resDoc, resp)) {
-          const char* say = resDoc["say"] | (resDoc["reply"] | "");
-          const char* md  = resDoc["mood"] | "cyber";
-          if (say && say[0]) {
-            strlcpy(_lastAiReply, say, sizeof(_lastAiReply));
+          const char* rawReply = resDoc["choices"][0]["message"]["content"] |
+                                 (resDoc["say"] | (resDoc["reply"] | (resDoc["message"] | (resDoc["output"] | (resDoc["response"] | "")))));
+          const char* md = resDoc["mood"] | "cyber";
+          if (rawReply && rawReply[0]) {
+            String cStr(rawReply);
+            cStr.trim();
+            int js = cStr.indexOf('{');
+            int je = cStr.lastIndexOf('}');
+            String finalSay = cStr;
+            uint8_t finalMood = petMoodFromStr(md);
+            if (js >= 0 && je > js) {
+              JsonDocument inner;
+              if (!deserializeJson(inner, cStr.substring(js, je + 1))) {
+                if (inner["say"].is<const char*>())  finalSay  = inner["say"].as<const char*>();
+                if (inner["mood"].is<const char*>()) finalMood = petMoodFromStr(inner["mood"].as<const char*>());
+              }
+            }
+            sanitizeAscii(finalSay.c_str(), _lastAiReply, sizeof(_lastAiReply));
             _aiThoughtsCount++;
-            triggerSay(say, petMoodFromStr(md), 35, "HERMES AI");
+            triggerSay(_lastAiReply, finalMood, 35, "HERMES AI");
             return true;
           }
         }
+      } else {
+        http.end();
       }
-      http.end();
     }
-    // Fallback transparently to NVIDIA NIM (Hermes Wazuh Engine)
+    // If Hermes endpoint is unreachable and an API key is configured, fall back to cloud LLM
+    if (!s.pet.aiKey[0]) return false;
     prov = 0;
   }
 

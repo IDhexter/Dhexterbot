@@ -123,8 +123,8 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
    </div>
    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
     <button class="btn sec" onclick="triggerAutoThought()">&#x2728; Gerar Pensamento Aut&ocirc;nomo Agora</button>
-    <button class="btn sec" onclick="sendHermesSim('job_found','Hermes: 2 vagas Sr remotas no Notion!','excited')">&#x1F4BC; Testar Evento Hermes: Nova Vaga</button>
-    <button class="btn sec" onclick="sendHermesSim('wazuh_alert','Wazuh SIEM: Alerta nivel 12 detectado!','angry')">&#x1F6A8; Testar Evento Hermes: Wazuh</button>
+    <button class="btn sec" onclick="sendHermesSim('success','Hermes Agent: Tarefa concluida com sucesso!','excited')">&#x1F916; Testar Hermes: Tarefa Conclu&iacute;da</button>
+    <button class="btn sec" onclick="sendHermesSim('alert','Hermes Agent: Alerta critico detectado!','angry')">&#x1F6A8; Testar Hermes: Alerta Cr&iacute;tico</button>
     <button class="btn sec" onclick="document.querySelector('nav button[data-t=ai]').click()">&#x2699;&#xFE0F; Configurar IAs, Chaves &amp; OAuth</button>
    </div>
   </div>
@@ -214,17 +214,17 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
  <!-- TAB 2: CONFIGURAR IAs & HERMES BOT -->
  <section id="ai" class="tab">
   <div class="card" style="border-color:rgba(168,85,247,.45)">
-   <h2 style="color:#d8b4fe">&#x1F9E0; Configurar Motores de IA, Login OAuth &amp; Hermes Bot</h2>
+   <h2 style="color:#d8b4fe">&#x1F9E0; Configurar Motores de IA, Login OAuth &amp; Hermes Agent Universal</h2>
    <div class="chk"><input id="aiEnabled" type="checkbox"><label>Ativar <b>Pensamentos Neurais Aut&ocirc;nomos</b> (a NOC Girl comenta clima, hora e estado da rede sozinha)</label></div>
    <div class="row">
     <div>
      <label>Motor de Intelig&ecirc;ncia Artificial</label>
      <select id="aiProvider" onchange="onAiProvChange()">
-      <option value="0">0 - NVIDIA NIM (Motor do seu Hermes Wazuh — Nemotron 120B)</option>
-      <option value="1">1 - Hermes Bot Gateway Local (HTTP Bridge + Fallback NIM)</option>
+      <option value="0">0 - NVIDIA NIM (Nemotron / Llama API)</option>
+      <option value="1">1 - Hermes Agent Universal (Qualquer Gateway HTTP / OpenAI-Compatible)</option>
       <option value="2">2 - OpenRouter (Suporta Login OAuth PKCE 1-Clique!)</option>
       <option value="3">3 - OpenAI Oficial (gpt-4o-mini)</option>
-      <option value="4">4 - Google Gemini (Motor do seu Hermes LXC 100)</option>
+      <option value="4">4 - Google Gemini (gemini-2.0-flash)</option>
       <option value="5">5 - Groq Cloud (Llama 3.3 70B Ultra-R&aacute;pido)</option>
      </select>
     </div>
@@ -235,39 +235,40 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
    </div>
    <div class="row">
     <div>
-     <label>Modelo LLM</label>
-     <input id="aiModel" type="text" placeholder="nvidia/nemotron-3.5-super-vl-120b-a12b">
+     <label>Modelo LLM / Nome do Agente</label>
+     <input id="aiModel" type="text" placeholder="hermes-agent / gpt-4o-mini / nemotron">
     </div>
     <div>
-     <label>Chave API / Token OAuth</label>
-     <input id="aiKey" type="password" autocomplete="off" placeholder="(chave do Hermes pre-configurada na Flash)">
+     <label>Chave API / Token Bearer / OAuth</label>
+     <input id="aiKey" type="password" autocomplete="off" placeholder="(manter token salvo ou inserir novo)">
     </div>
    </div>
    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <button class="btn neural" type="button" onclick="startOpenRouterOAuth()">&#x1F517; Conectar via OAuth 1-Clique (OpenRouter)</button>
-    <button class="btn sec" type="button" onclick="useHermesNvidiaPreset()">&#x26A1; Usar Preset Hermes NVIDIA Nemotron</button>
-    <button class="btn sec" type="button" onclick="useOpenAiPreset()">&#x1F916; Preset OpenAI gpt-4o-mini</button>
+    <button class="btn sec" type="button" onclick="useUniversalHermesPreset()">&#x1F916; Preset Hermes Agent Universal</button>
+    <button class="btn sec" type="button" onclick="useHermesNvidiaPreset()">&#x26A1; Preset NVIDIA NIM</button>
+    <button class="btn sec" type="button" onclick="useOpenAiPreset()">&#x1F9E0; Preset OpenAI gpt-4o-mini</button>
    </div>
-   <small class="hint">O consumo de tokens &eacute; m&iacute;nimo (~45 tokens por pensamento). O motor <b>NVIDIA NIM (Nemotron 120B)</b> do seu Hermes Bot j&aacute; vem configurado de f&aacute;brica!</small>
+   <small class="hint">Compat&iacute;vel com <b>qualquer inst&acirc;ncia do Hermes Agent</b> (Nous Research <code>hermes-agent</code>, servidor OpenAI-compatible <code>/v1/chat/completions</code>, endpoint REST <code>/api/chat</code> ou nuvem).</small>
 
-   <label style="margin-top:12px">URL do seu Hermes Agent Gateway (Proxmox LXC 100 ou Wazuh)</label>
+   <label style="margin-top:12px">URL Universal do seu Hermes Agent (Qualquer IP, Hostname ou Dom&iacute;nio HTTP/HTTPS)</label>
    <div class="row">
-    <input id="hermesUrl" type="url" placeholder="http://172.1.0.32:9119">
-    <button class="btn sec" style="flex:0 0 auto" type="button" onclick="sv('hermesUrl','http://172.1.0.32:9119');toast('Hermes LXC 100 (172.1.0.32:9119)')">LXC 100 (:9119)</button>
-    <button class="btn sec" style="flex:0 0 auto" type="button" onclick="sv('hermesUrl','http://172.17.0.40:9119');toast('Hermes Wazuh (172.17.0.40:9119)')">Wazuh (172.17.0.40)</button>
+    <input id="hermesUrl" type="url" placeholder="http://hermes.local:8000/v1/chat/completions">
    </div>
    <div style="margin-top:14px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Configura&ccedil;&otilde;es de IA &amp; Hermes</button></div>
   </div>
 
   <div class="card">
-   <h2>&#x1F916; Endpoint Nativo para o seu Hermes Bot (<code>/api/hermes/webhook</code>)</h2>
-   <small class="hint">O seu <b>Hermes Agent</b> (no LXC 100 <code>172.1.0.32</code> ou no Wazuh <code>172.17.0.40</code>) pode acionar a NOC Cyber Girl na sua mesa com 1 linha:<br><br>
-   <b>1. Avisar quando o Hermes Job Hunter achar vaga remota:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"job_found","message":"Hermes: Nova vaga Sr Remota no Notion!"}'</code><br><br>
-   <b>2. Avisar alerta de seguran&ccedil;a do Wazuh SIEM:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"wazuh_alert","message":"Wazuh SIEM: Brute force bloqueado!","alerts":1}'</code><br><br>
-   <b>3. Fazer o Hermes conversar com o C&eacute;rebro Neural da SmallTV:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"ask","message":"Relatorio de turno NOC!"}'</code>
+   <h2>&#x1F916; Protocolo Universal Hermes Agent &harr; DhexterBot (<code>/api/hermes</code>)</h2>
+   <small class="hint">Qualquer inst&acirc;ncia do <b>Hermes Agent</b> em qualquer rede pode descobrir as capacidades da DhexterBot via <code>GET /api/hermes</code> e interagir via <code>POST /api/hermes/webhook</code>:<br><br>
+   <b>1. Descoberta Autom&aacute;tica de Schema &amp; Status (Tool / MCP Discovery):</b><br>
+   <code>curl http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes</code><br><br>
+   <b>2. Enviar notifica&ccedil;&atilde;o, conclus&atilde;o de tarefa ou fala de qualquer Hermes:</b><br>
+   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"success","message":"Hermes: Deploy finalizado com sucesso!","mood":"excited"}'</code><br><br>
+   <b>3. Acionar alerta visual + fones vermelhos piscantes:</b><br>
+   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"alert","message":"Hermes: Anomalia detectada!","alerts":1}'</code><br><br>
+   <b>4. Fazer qualquer Hermes conversar com o C&eacute;rebro Neural da SmallTV:</b><br>
+   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"ask","message":"Qual o status da bancada agora?"}'</code>
    </small>
   </div>
  </section>
@@ -505,15 +506,21 @@ function onAiProvChange(){
  var m=$('aiModel');
  if(!m)return;
  if(p===0) m.value='nvidia/nemotron-3.5-super-vl-120b-a12b';
+ else if(p===1) m.value='hermes-agent';
  else if(p===2) m.value='openai/gpt-4o-mini';
  else if(p===3) m.value='gpt-4o-mini';
  else if(p===4) m.value='gemini-2.0-flash';
  else if(p===5) m.value='llama-3.3-70b-versatile';
 }
+function useUniversalHermesPreset(){
+ sv('aiProvider',1);
+ sv('aiModel','hermes-agent');
+ toast('Hermes Agent Universal selecionado! Informe a URL do seu Hermes abaixo e clique em Salvar.');
+}
 function useHermesNvidiaPreset(){
  sv('aiProvider',0);
  sv('aiModel','nvidia/nemotron-3.5-super-vl-120b-a12b');
- toast('Preset Hermes NVIDIA Nemotron selecionado! Clique em Salvar.');
+ toast('Preset NVIDIA NIM selecionado! Clique em Salvar.');
 }
 function useOpenAiPreset(){
  sv('aiProvider',3);
@@ -596,7 +603,7 @@ function renderWatchTargets(arr){
   {name:'Internet',host:'1.1.1.1',port:53,enabled:true},
   {name:'Google DNS',host:'8.8.8.8',port:53,enabled:true},
   {name:'Zabbix NOC',host:'10.10.1.26',port:80,enabled:true},
-  {name:'Hermes Wazuh',host:'172.17.0.40',port:22,enabled:false}
+  {name:'Hermes Agent',host:'hermes.local',port:8000,enabled:false}
  ];
  var html='';
  for(var i=0;i<4;i++){

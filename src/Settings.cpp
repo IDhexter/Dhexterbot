@@ -190,9 +190,9 @@ void PetSettings::setDefaults() {
   targets[2].port = 80;
   targets[2].enabled = true;
 
-  strlcpy(targets[3].name, "Hermes Wazuh", sizeof(targets[3].name));
-  strlcpy(targets[3].host, "172.17.0.40", sizeof(targets[3].host));
-  targets[3].port = 22;
+  strlcpy(targets[3].name, "Hermes Agent", sizeof(targets[3].name));
+  strlcpy(targets[3].host, "hermes.local", sizeof(targets[3].host));
+  targets[3].port = 8000;
   targets[3].enabled = false;
 
   zbxEnabled  = false;
@@ -201,10 +201,10 @@ void PetSettings::setDefaults() {
   zbxMinSev   = 3;
 
   aiEnabled     = true;
-  aiProvider    = 0; // 0 = NVIDIA NIM (Hermes Wazuh Engine)
+  aiProvider    = 0; // 0 = NVIDIA NIM, 1 = Universal Hermes Agent, 2 = OpenRouter OAuth, 3 = OpenAI, 4 = Gemini, 5 = Groq
   strlcpy(aiKey, "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", sizeof(aiKey));
   strlcpy(aiModel, "nvidia/nemotron-3.5-super-vl-120b-a12b", sizeof(aiModel));
-  strlcpy(hermesUrl, "http://172.1.0.32:9119", sizeof(hermesUrl));
+  strlcpy(hermesUrl, "http://hermes.local:8000", sizeof(hermesUrl));
   aiIntervalMin = 10;
 }
 

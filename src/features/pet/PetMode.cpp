@@ -336,11 +336,11 @@ bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, 
   char promptBuf[360];
   if (customPrompt && customPrompt[0]) {
     snprintf(promptBuf, sizeof(promptBuf),
-             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), parceira do Alex e do Hermes Bot. Hora:%s Clima:%.1fC HostsUP:%d Down:%d. Alex disse: \"%s\". Responda em Portugues sem acentos, max 60 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry|love\",\"say\":\"frase\"}",
+             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), parceira do Alex e do Hermes Bot. Hora:%s Clima:%.1fC HostsUP:%d Down:%d. Alex disse: \"%s\". Responda em Portugues sem acentos, max 50 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry|love\",\"say\":\"frase\"}",
              timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, customPrompt);
   } else {
     snprintf(promptBuf, sizeof(promptBuf),
-             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), guardiana de rede integrada ao Hermes Bot e Zabbix. Hora:%s Clima:%.1fC HostsUP:%d Down:%d ZbxAlerts:%d. Gere um comentario espontaneo carismatico em Portugues sem acentos, max 60 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry\",\"say\":\"frase\"}",
+             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), guardiana de rede integrada ao Hermes Bot e Zabbix. Hora:%s Clima:%.1fC HostsUP:%d Down:%d ZbxAlerts:%d. Gere um comentario espontaneo carismatico em Portugues sem acentos, max 50 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry\",\"say\":\"frase\"}",
              timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, _zbxProblems > 0 ? _zbxProblems : 0);
   }
 
@@ -972,8 +972,8 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
   // Head center
   int hx = 120 + (gx / 4);
-  int hy = (compact ? 48 : 80) + (gy / 3);
-  int scalePct = compact ? 72 : 100;
+  int hy = (compact ? 48 : 63) + (gy / 3);
+  int scalePct = compact ? 72 : 92;
 
   // Eye centers & dimensions
   int eyeSep = (27 * scalePct) / 100;
@@ -1018,58 +1018,19 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
   for (int y = 0; y < areaH; y++) {
     // -----------------------------------------------------------------------
-    // 1. SERVER ROOM DATACENTER BACKGROUND + BLINKING SWITCH RACKS
+    // 1. CLEAN DARK STUDIO BACKDROP (No switches behind her!)
     // -----------------------------------------------------------------------
-    uint16_t bgCol = (y < areaH / 2) ? gfxTint(0x0042) : gfxTint(0x0863);
+    uint16_t bgCol = (y < areaH / 2) ? gfxTint(0x0021) : gfxTint(0x0842);
     for (int x = 0; x < areaW; x++) {
       rowBuf[x] = bgCol;
-    }
-
-    // Left (x = 3..37) & Right (x = 202..236) 19" Server Racks
-    for (int side = 0; side < 2; side++) {
-      int rx0 = (side == 0) ? 3 : 202;
-      int rx1 = rx0 + 34;
-      if (y >= 4 && y < areaH - 4) {
-        for (int x = rx0; x <= rx1; x++) {
-          if (x == rx0 || x == rx1) {
-            rowBuf[x] = colNeonDim;
-          } else {
-            rowBuf[x] = colRackBg;
-          }
-        }
-        int uMod = (y - 6) % 26;
-        int uIdx = (y - 6) / 26;
-        if (uMod >= 2 && uMod <= 20) {
-          for (int x = rx0 + 2; x <= rx1 - 2; x++) {
-            rowBuf[x] = colSwitchBg;
-          }
-          // Blinking Switch Port LEDs (top of each 1U switch)
-          if (uMod >= 5 && uMod <= 7) {
-            for (int p = 0; p < 4; p++) {
-              int px = rx0 + 5 + p * 7;
-              bool ledOn = (((_animTick / 3) + uIdx * 3 + p * 2 + side) % 3) != 0;
-              uint16_t pCol = alert ? (ledOn ? colRedAlert : colRackBg)
-                                    : (ledOn ? ((p & 1) ? colCyanLed : colGreenLed) : colNeonDim);
-              rowBuf[px]     = pCol;
-              rowBuf[px + 1] = pCol;
-              rowBuf[px + 2] = pCol;
-            }
-          } else if (uMod >= 11 && uMod <= 16) {
-            // RJ45 port cutouts
-            for (int p = 0; p < 4; p++) {
-              int px = rx0 + 5 + p * 7;
-              rowBuf[px] = 0x0000; rowBuf[px + 1] = 0x0000; rowBuf[px + 2] = 0x0000;
-            }
-          }
-        }
-      }
     }
 
     int dy = ((y - hy) * 100) / scalePct; // Normalized vertical coordinate relative to head center
 
     // -----------------------------------------------------------------------
-    // 2. JET-BLACK BOB HAIR BACK + UPTURNED FLIPPED TIPS & BLUE NEON AURA
+    // 2. JET-BLACK BOB HAIR BACK + UPTURNED FLIPPED TIPS (FIXED HAIR COLOR!)
     // -----------------------------------------------------------------------
+    uint16_t colHairRim = gfxTint(0x1A56); // Fixed subtle studio blue-slate rim (hair never changes color!)
     if (dy >= -68 && dy <= 66) {
       int hairHW = 0;
       if (dy < -20) {
@@ -1091,17 +1052,16 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
       if (hairHW > 0) {
         int realHW = (hairHW * scalePct) / 100;
-        int x0 = max(0, hx - realHW - 2);
-        int x1 = min(areaW - 1, hx + realHW + 2);
+        int x0 = max(0, hx - realHW - 1);
+        int x1 = min(areaW - 1, hx + realHW + 1);
         for (int x = x0; x <= x1; x++) {
           int adx = abs(x - hx);
-          // Upturned curl notch cutout on outer tips (gives the exact flipped curl silhouette!)
           int normAdx = (adx * 100) / scalePct;
           if (dy >= 24 && dy <= 40 && normAdx >= 72 && normAdx <= 78 && dy < 32 + (normAdx - 72)) {
             continue;
           }
           if (adx >= realHW) {
-            rowBuf[x] = colNeon; // Glowing blue neon rim aura!
+            rowBuf[x] = colHairRim; // Fixed hair outline color!
           } else {
             rowBuf[x] = colHair;
           }
@@ -1110,7 +1070,7 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
     }
 
     // -----------------------------------------------------------------------
-    // 3. NECK, BLACK CHOKER WITH NEON GEM & WHITE TEE COLLAR
+    // 3. NECK, BLACK CHOKER & WHITE TEE COLLAR
     // -----------------------------------------------------------------------
     if (dy >= 40 && dy <= 76) {
       int neckHW = (14 * scalePct) / 100;
@@ -1118,20 +1078,18 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
         for (int x = hx - neckHW; x <= hx + neckHW; x++) {
           if (x >= 0 && x < areaW) {
             if (dy >= 49 && dy <= 54) {
-              // Black Choker with glowing center neon gem!
-              if (abs(x - hx) <= 3 && dy >= 50 && dy <= 53) rowBuf[x] = colNeon;
-              else rowBuf[x] = colLash;
+              rowBuf[x] = colLash; // Fixed black choker
             } else {
               rowBuf[x] = colNeck;
             }
           }
         }
       } else {
-        // White T-Shirt Shoulders & Collar with Neon Rim
+        // White T-Shirt Shoulders & Collar
         int shHW = ((16 + (dy - 58) * 3) * scalePct) / 100;
         for (int x = max(0, hx - shHW); x <= min(areaW - 1, hx + shHW); x++) {
           int adx = abs(x - hx);
-          if (adx >= shHW - 1) rowBuf[x] = colNeon;
+          if (adx >= shHW - 1) rowBuf[x] = colSkinShad;
           else rowBuf[x] = colHeadband;
         }
       }
@@ -1476,38 +1434,73 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 }
 
 // ---------------------------------------------------------------------------
-// View 0 Bottom Panel: Cyberpunk Speech Bubble (No Tamagotchi Bars!) (y = 186..239)
+// View 0 Bottom Panel: Large Cyberpunk Dialogue Box (TextSize 2!) (y = 160..239)
 // ---------------------------------------------------------------------------
+static void printWrappedBig(Arduino_GFX* g, int16_t x0, int16_t y0, const char* text) {
+  if (!text || !text[0]) return;
+  g->setTextSize(2); // 12x16 big legible font! Max 18 chars per line inside 224px box
+  const int maxCols = 18;
+  const int maxLines = 3;
+  const char* p = text;
+
+  for (int line = 0; line < maxLines && *p; line++) {
+    while (*p == ' ') p++;
+    if (!*p) break;
+
+    int len = (int)strlen(p);
+    int take = len;
+    if (take > maxCols) {
+      take = maxCols;
+      // Try to break cleanly at a space
+      for (int k = maxCols; k >= 8; k--) {
+        if (p[k] == ' ') {
+          take = k;
+          break;
+        }
+      }
+    }
+
+    char buf[22];
+    memcpy(buf, p, take);
+    buf[take] = 0;
+    g->setCursor(x0, y0 + line * 18);
+    g->print(buf);
+    p += take;
+  }
+}
+
 void PetMode::drawBottomPanel(const Settings& s) {
   auto* g = gfxDev();
-  g->fillRect(0, 186, 240, 54, 0x0000);
+  g->fillRect(0, 160, 240, 80, 0x0000);
   if (!s.pet.showFooter) return;
 
   uint16_t rawMain   = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
   uint16_t borderCol = gfxTint(rawMain);
-  uint16_t bubbleBg  = gfxTint(0x0862);
+  uint16_t bubbleBg  = gfxTint(0x0842);
   uint16_t textCol   = _speechActive ? gfxTint(0xFFE0) : gfxTint(0xFFFF);
 
-  // Full-width Cyberpunk Speech Card (y = 189..236, height = 47px)
-  g->fillRoundRect(6, 189, 228, 47, 8, bubbleBg);
-  g->drawRoundRect(6, 189, 228, 47, 8, borderCol);
+  // Large Cyberpunk Speech Window (y = 161..238, height = 77px, width = 232px)
+  g->fillRoundRect(4, 161, 232, 77, 8, bubbleBg);
+  g->drawRoundRect(4, 161, 232, 77, 8, borderCol);
+  g->drawRoundRect(5, 162, 230, 75, 7, borderCol);
 
   // Header badge inside speech bubble: [IA NEURAL] / [HERMES BOT] / [ZABBIX NOC]
   const char* srcBadge = _speechActive ? _speechSource : "NOC CYBER GIRL";
   g->setTextSize(1);
   g->setTextColor(borderCol, bubbleBg);
-  g->setCursor(14, 194);
+  g->setCursor(11, 166);
   g->print("[");
   g->print(srcBadge);
   g->print("]");
 
-  // Right side of header badge: AI provider tag
-  const char* provNames[] = {"NIM-120B", "HERMES", "OPENROUTER", "OPENAI", "GEMINI", "GROQ"};
+  const char* provNames[] = {"NIM-120B", "HERMES", "OAUTH", "OPENAI", "GEMINI", "GROQ"};
   const char* pName = provNames[s.pet.aiProvider <= 5 ? s.pet.aiProvider : 0];
-  int16_t px = 226 - (int16_t)(strlen(pName) * 6);
+  int16_t px = 228 - (int16_t)(strlen(pName) * 6);
   g->setTextColor(gfxTint(0x74DF), bubbleBg);
-  g->setCursor(px, 194);
+  g->setCursor(px, 166);
   g->print(pName);
+
+  g->drawFastHLine(10, 176, 220, gfxTint(scaleColor565(rawMain, 35)));
 
   const char* msg = nullptr;
   char autoBuf[68];
@@ -1520,46 +1513,33 @@ void PetMode::drawBottomPanel(const Settings& s) {
     switch (_phraseIdx) {
       case 1:
         if (anySystemDown(s)) {
-          snprintf(autoBuf, sizeof(autoBuf), "ATENCAO: Queda detectada no painel NOC! Verifique agora.");
+          snprintf(autoBuf, sizeof(autoBuf), "ALERTA: Queda no NOC! Verifique agora!");
         } else {
-          snprintf(autoBuf, sizeof(autoBuf), "Switches Aruba, Zabbix e links WAN operando 100%% UP!");
+          snprintf(autoBuf, sizeof(autoBuf), "Switches Aruba e links WAN 100%% UP!");
         }
         msg = autoBuf;
         break;
       case 2:
         if (_weatherValid) {
-          snprintf(autoBuf, sizeof(autoBuf), "Temperatura externa: %.1f C | Integrada ao Hermes Bot", _weatherTemp);
+          snprintf(autoBuf, sizeof(autoBuf), "Clima: %.1f C | Hermes Bot ativo!", _weatherTemp);
         } else {
-          snprintf(autoBuf, sizeof(autoBuf), "Monitorando pacotes em tempo real com o Hermes Bot.");
+          snprintf(autoBuf, sizeof(autoBuf), "Monitorando pacotes com Hermes Bot!");
         }
         msg = autoBuf;
         break;
       case 4:
-        snprintf(autoBuf, sizeof(autoBuf), "IP: %s | RAM Livre: %u KB | Pensamentos IA: %u",
-                 netIP().c_str(), (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)_aiThoughtsCount);
+        snprintf(autoBuf, sizeof(autoBuf), "IP %s | IA: %u pensamentos",
+                 netIP().c_str(), (unsigned)_aiThoughtsCount);
         msg = autoBuf;
         break;
       default:
-        msg = s.pet.statusText[0] ? s.pet.statusText : "Pronta na bancada! Converse comigo na Web UI.";
+        msg = s.pet.statusText[0] ? s.pet.statusText : "Pronta no NOC! Fale comigo na Web UI.";
         break;
     }
   }
 
   g->setTextColor(textCol, bubbleBg);
-  size_t len = strlen(msg);
-  if (len <= 35) {
-    g->setCursor(14, 212);
-    g->print(msg);
-  } else {
-    char line1[36];
-    strlcpy(line1, msg, sizeof(line1));
-    g->setCursor(14, 207);
-    g->print(line1);
-    char line2[36];
-    strlcpy(line2, msg + 35, sizeof(line2));
-    g->setCursor(14, 220);
-    g->print(line2);
-  }
+  printWrappedBig(g, 11, 181, msg);
 }
 
 // ---------------------------------------------------------------------------
@@ -1722,7 +1702,7 @@ void PetMode::service(const Settings& s) {
       _footerDirty = false;
     }
   } else {
-    drawFaceRegion(s, 23, 163);
+    drawFaceRegion(s, 23, 137);
     if (_footerDirty) {
       drawBottomPanel(s);
       _footerDirty = false;

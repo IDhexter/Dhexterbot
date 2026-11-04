@@ -74,8 +74,9 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
 </header>
 <nav>
  <button data-t="pet" class="active">&#x1F3A7; NOC Girl &amp; Chat IA</button>
- <button data-t="noc">&#x1F9E0; Hermes Bot, IA &amp; Zabbix</button>
- <button data-t="display">&#x1F3A8; Visual &amp; Tela</button>
+ <button data-t="ai">&#x1F9E0; Configurar IAs &amp; Hermes</button>
+ <button data-t="noc">&#x1F6E1;&#xFE0F; Watchdog &amp; Zabbix</button>
+ <button data-t="display">&#x1F3A8; Visual &amp; Fones</button>
  <button data-t="system">&#x1F4E1; Wi-Fi &amp; Sistema</button>
 </nav>
 <main>
@@ -122,8 +123,9 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
    </div>
    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
     <button class="btn sec" onclick="triggerAutoThought()">&#x2728; Gerar Pensamento Aut&ocirc;nomo Agora</button>
-    <button class="btn sec" onclick="sendHermesSim('job_found','Hermes Job Hunter: 2 vagas remotas Sênior no Notion!','excited')">&#x1F4BC; Testar Evento Hermes: Nova Vaga</button>
-    <button class="btn sec" onclick="sendHermesSim('wazuh_alert','Hermes Wazuh SIEM: Alerta nivel 12 detectado!','angry')">&#x1F6A8; Testar Evento Hermes: Wazuh</button>
+    <button class="btn sec" onclick="sendHermesSim('job_found','Hermes: 2 vagas Sr remotas no Notion!','excited')">&#x1F4BC; Testar Evento Hermes: Nova Vaga</button>
+    <button class="btn sec" onclick="sendHermesSim('wazuh_alert','Wazuh SIEM: Alerta nivel 12 detectado!','angry')">&#x1F6A8; Testar Evento Hermes: Wazuh</button>
+    <button class="btn sec" onclick="document.querySelector('nav button[data-t=ai]').click()">&#x2699;&#xFE0F; Configurar IAs, Chaves &amp; OAuth</button>
    </div>
   </div>
 
@@ -209,10 +211,10 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
   </div>
  </section>
 
- <!-- TAB 2: HERMES BOT, IA NEURAL & ZABBIX NOC -->
- <section id="noc" class="tab">
+ <!-- TAB 2: CONFIGURAR IAs & HERMES BOT -->
+ <section id="ai" class="tab">
   <div class="card" style="border-color:rgba(168,85,247,.45)">
-   <h2 style="color:#d8b4fe">&#x1F9E0; C&eacute;rebro Neural Aut&ocirc;nomo + Login OAuth + Hermes Bot</h2>
+   <h2 style="color:#d8b4fe">&#x1F9E0; Configurar Motores de IA, Login OAuth &amp; Hermes Bot</h2>
    <div class="chk"><input id="aiEnabled" type="checkbox"><label>Ativar <b>Pensamentos Neurais Aut&ocirc;nomos</b> (a NOC Girl comenta clima, hora e estado da rede sozinha)</label></div>
    <div class="row">
     <div>
@@ -258,6 +260,22 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
   </div>
 
   <div class="card">
+   <h2>&#x1F916; Endpoint Nativo para o seu Hermes Bot (<code>/api/hermes/webhook</code>)</h2>
+   <small class="hint">O seu <b>Hermes Agent</b> (no LXC 100 <code>172.1.0.32</code> ou no Wazuh <code>172.17.0.40</code>) pode acionar a NOC Cyber Girl na sua mesa com 1 linha:<br><br>
+   <b>1. Avisar quando o Hermes Job Hunter achar vaga remota:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"job_found","message":"Hermes: Nova vaga Sr Remota no Notion!"}'</code><br><br>
+   <b>2. Avisar alerta de seguran&ccedil;a do Wazuh SIEM:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"wazuh_alert","message":"Wazuh SIEM: Brute force bloqueado!","alerts":1}'</code><br><br>
+   <b>3. Fazer o Hermes conversar com o C&eacute;rebro Neural da SmallTV:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"ask","message":"Relatorio de turno NOC!"}'</code>
+   </small>
+  </div>
+ </section>
+
+ <!-- TAB 3: WATCHDOG & ZABBIX NOC -->
+ <section id="noc" class="tab">
+
+  <div class="card">
    <h2>&#x1F6E1;&#xFE0F; Status ao Vivo dos Sistemas Monitorados</h2>
    <div id="nocLiveList" class="muted">Carregando status...</div>
    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
@@ -298,20 +316,9 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
    <div style="margin-top:14px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Configura&ccedil;&otilde;es de Sistemas</button></div>
   </div>
 
-  <div class="card">
-   <h2>&#x1F916; Endpoint Nativo para o seu Hermes Bot (<code>/api/hermes/webhook</code>)</h2>
-   <small class="hint">O seu <b>Hermes Agent</b> (no LXC 100 <code>172.1.0.32</code> ou no Wazuh <code>172.17.0.40</code>) pode acionar a NOC Cyber Girl na sua mesa com 1 linha:<br><br>
-   <b>1. Avisar quando o Hermes Job Hunter achar vaga remota:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"job_found","message":"Hermes: Nova vaga Sr Remota salva no Notion!"}'</code><br><br>
-   <b>2. Avisar alerta de seguran&ccedil;a do Wazuh SIEM:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"wazuh_alert","message":"Wazuh SIEM: Brute force bloqueado!","alerts":1}'</code><br><br>
-   <b>3. Fazer o Hermes conversar com o C&eacute;rebro Neural da SmallTV:</b><br>
-   <code>curl -X POST http://10.0.15.235/api/hermes/webhook -d '{"event":"ask","message":"Relatorio de turno NOC!"}'</code>
-   </small>
-  </div>
  </section>
 
- <!-- TAB 3: VISUAL & TELA -->
+ <!-- TAB 4: VISUAL & FONES -->
  <section id="display" class="tab">
   <div class="card">
    <h2>&#x1F3A7; Customiza&ccedil;&atilde;o da NOC Cyber Girl</h2>
@@ -320,7 +327,7 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
     <div><label>Frase Padr&atilde;o do Rodap&eacute;</label><input id="petStatusText" type="text" maxlength="40" placeholder="NOC Cyber Girl Online!"></div>
    </div>
    <div class="row">
-    <div><label>Cor do Anel Neon dos Headphones &amp; Aura</label>
+    <div><label>Cor Apenas do Anel Neon dos Headphones (Cabelo Preto Fixo)</label>
      <select id="petColorPreset">
       <option value="0">Azul Ciano Neon (Original da Foto)</option>
       <option value="1">Verde Matrix / Esmeralda</option>

@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DhexterBot 2.0 — Painel de Controle</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAZNWZmIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PHJlY3QgeD0iOCIgeT0iMTQiIHdpZHRoPSI0OCIgaGVpZ2h0PSIzOCIgcng9IjEwIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIzMCIgcj0iNSIgZmlsbD0iIzAwZTVmZiIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjUiIGZpbGw9IiMwMGU1ZmYiLz48cGF0aCBkPSJNMjQgNDFxOCA2IDE2IDAiLz48cGF0aCBkPSJNMzIgNXY5TTE4IDU2aDI4Ii8+PC9nPjwvc3ZnPg==">
+<style>
+:root{--bg:#090d14;--card:#121824;--card2:#0d121b;--mut:#8b9bb4;--fg:#e6edf3;--acc:#00e5ff;--acc2:#22c55e;--amber:#f59e0b;--pink:#f43f5e;--red:#ef4444;--bd:#222c3c}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);font-size:14px}
+header{padding:12px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;background:#0b1018}
+header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em;color:#fff}
+header .logo{width:28px;height:28px;flex:0 0 auto}
+header .dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}
+header .dot.ok{background:var(--acc2);box-shadow:0 0 8px var(--acc2)}
+nav{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bd);position:sticky;top:0;background:rgba(9,13,20,.95);backdrop-filter:blur(6px);z-index:10}
+nav button{background:var(--card2);border:1px solid transparent;color:var(--mut);padding:8px 13px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s}
+nav button:hover{color:var(--fg);border-color:var(--bd)}
+nav button.active{background:rgba(0,229,255,.12);color:var(--acc);border-color:rgba(0,229,255,.4)}
+main{padding:16px;max-width:740px;margin:0 auto}
+.tab{display:none}.tab.active{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--acc);margin:0 0 12px;font-weight:700}
+label{display:block;margin:10px 0 4px;font-size:12px;color:var(--mut);font-weight:600}
+input[type=text],input[type=password],input[type=number],input[type=url],input[type=time],select{
+ width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--bd);border-radius:9px;color:var(--fg);font-size:14px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0}
+.chk input{width:17px;height:17px;accent-color:var(--acc)}
+.chk label{margin:0;color:var(--fg);font-size:13px;font-weight:400}
+.req{border:1px solid var(--bd);background:var(--card2);border-radius:10px;padding:11px 13px;margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--mut)}
+.req b{color:var(--fg);font-weight:600}
+button.btn{background:var(--acc);color:#021014;border:0;padding:9px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s}
+button.btn:hover{filter:brightness(1.1)}
+button.btn.sec{background:#1c2536;color:var(--fg);border:1px solid var(--bd);font-weight:600}
+button.btn.sec:hover{border-color:var(--acc)}
+button.btn.act{background:linear-gradient(135deg,#00e5ff,#3b82f6);color:#021014}
+button.btn.warn{background:var(--amber);color:#1a0f00}
+button.btn.danger{background:var(--red);color:#fff}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+.grid-btn{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;margin-top:6px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.stat-box{background:var(--card2);border:1px solid var(--bd);border-radius:10px;padding:9px 11px}
+.stat-box .lbl{font-size:11px;color:var(--mut);display:flex;justify-content:space-between;font-weight:600}
+.pbar{height:7px;background:#070a0f;border-radius:6px;overflow:hidden;margin-top:6px}
+.pbar>div{height:100%;transition:.3s}
+.muted{color:var(--mut);font-size:12px}
+table{width:100%;border-collapse:collapse}
+td{padding:5px 4px}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px}
+.kv:last-child{border:0}.kv b{font-weight:600}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0b1018;border:1px solid var(--acc);color:#fff;padding:10px 18px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;font-weight:600;z-index:99}
+.toast.show{opacity:1}
+.net{padding:8px 10px;border:1px solid var(--bd);border-radius:8px;margin:4px 0;cursor:pointer;display:flex;justify-content:space-between;background:var(--card2)}
+.net:hover{border-color:var(--acc)}
+.bar{height:8px;background:var(--card2);border-radius:6px;overflow:hidden;margin-top:8px}
+.bar>div{height:100%;width:0;background:var(--acc);transition:.2s}
+small.hint{display:block;color:var(--mut);margin-top:5px;font-size:12px;line-height:1.45}
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:rgba(0,229,255,.15);color:var(--acc);border:1px solid rgba(0,229,255,.35)}
+.chip.lv{background:rgba(245,158,11,.15);color:var(--amber);border-color:rgba(245,158,11,.4)}
+.noc-row{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--card2);border:1px solid var(--bd);border-radius:8px;margin-bottom:6px}
+.badge-up{color:var(--acc2);font-weight:700;font-size:12px}
+.badge-down{color:var(--red);font-weight:700;font-size:12px}
+code{background:#070a0f;padding:2px 5px;border-radius:5px;color:var(--acc);font-size:12px}
+</style></head>
+<body>
+<header>
+ <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="var(--acc)" stroke-width="3.5" stroke-linecap="round"><rect x="8" y="14" width="48" height="38" rx="10"/><circle cx="24" cy="30" r="5" fill="var(--acc)"/><circle cx="40" cy="30" r="5" fill="var(--acc)"/><path d="M24 41q8 6 16 0"/><path d="M32 5v9M18 56h28"/></g></svg>
+ <span id="dot" class="dot"></span>
+ <h1>DhexterBot <span style="font-weight:400;color:var(--mut);font-size:13px">v2.0</span></h1>
+ <span id="lvBadge" class="chip lv">LV.1</span>
+ <span id="hi" class="muted" style="margin-left:auto"></span>
+</header>
+<nav>
+ <button data-t="pet" class="active">&#x1F916; Controle ao Vivo</button>
+ <button data-t="noc">&#x1F6E1;&#xFE0F; Sistemas &amp; NOC</button>
+ <button data-t="display">&#x1F3A8; Personalidade &amp; Tela</button>
+ <button data-t="system">&#x1F4E1; Wi-Fi &amp; Sistema</button>
+</nav>
+<main>
+ <!-- TAB 1: CONTROLE AO VIVO -->
+ <section id="pet" class="tab active">
+  <div class="card">
+   <h2>&#x1F916; Status &amp; Vida do DhexterBot</h2>
+   <div class="req" style="margin-bottom:10px">
+    <b>Humor:</b> <span id="petLiveMood" style="color:var(--acc)">CARREGANDO...</span> &middot;
+    <b>Clima:</b> <span id="petLiveTemp">-</span> &middot;
+    <b>Fala na Tela:</b> <span id="petLiveSpeech" style="color:var(--amber)">-</span>
+   </div>
+   <div class="stats-grid">
+    <div class="stat-box">
+     <div class="lbl"><span>&#x26A1; Energia</span><span id="stEnergy">95%</span></div>
+     <div class="pbar"><div id="barEnergy" style="width:95%;background:var(--acc)"></div></div>
+    </div>
+    <div class="stat-box">
+     <div class="lbl"><span>&#x2615; Caf&eacute;</span><span id="stCoffee">88%</span></div>
+     <div class="pbar"><div id="barCoffee" style="width:88%;background:var(--amber)"></div></div>
+    </div>
+    <div class="stat-box">
+     <div class="lbl"><span>&hearts; Felicidade</span><span id="stHappy">96%</span></div>
+     <div class="pbar"><div id="barHappy" style="width:96%;background:var(--pink)"></div></div>
+    </div>
+   </div>
+   <label>Modo de Visualiza&ccedil;&atilde;o na Telinha (Troca Imediata)</label>
+   <div class="row" style="margin-top:6px">
+    <button class="btn sec" id="vm0" onclick="petCmd({viewMode:0})">&#x1F916; Rosto Completo</button>
+    <button class="btn sec" id="vm1" onclick="petCmd({viewMode:1})">&#x1F552; Rel&oacute;gio Gigante + Rob&ocirc;</button>
+    <button class="btn sec" id="vm2" onclick="petCmd({viewMode:2})">&#x1F6E1;&#xFE0F; Painel NOC + Rob&ocirc;</button>
+   </div>
+  </div>
+
+  <div class="card">
+   <h2>&#x2728; Intera&ccedil;&otilde;es Tamagotchi &amp; A&ccedil;&otilde;es Animadas</h2>
+   <div class="grid-btn">
+    <button class="btn warn" onclick="petCmd({action:'coffee',hold:10})">&#x2615; Dar Caf&eacute; (+Energia)</button>
+    <button class="btn act" onclick="petCmd({action:'pet',hold:10})">&#x1F44B; Fazer Cafun&eacute; (+XP)</button>
+    <button class="btn sec" onclick="petCmd({action:'charge',hold:9})">&#x26A1; Recarregar Bateria</button>
+    <button class="btn sec" onclick="petCmd({action:'hacker',hold:12})">&#x1F4BB; Modo Hacker Matrix</button>
+    <button class="btn sec" onclick="petCmd({action:'celebrate',hold:10})">&#x1F389; Comemorar / Festa</button>
+    <button class="btn sec" onclick="petCmd({blink:true})">&#x1F609; Piscar Duplo</button>
+   </div>
+   <label style="margin-top:14px">12 Express&otilde;es &amp; Humores ao Vivo</label>
+   <div class="grid-btn">
+    <button class="btn" onclick="petCmd({mood:'auto',hold:0})">&#x1F916; Auto (IA)</button>
+    <button class="btn sec" onclick="petCmd({mood:'normal',hold:40})">&#x1F440; Normal</button>
+    <button class="btn sec" onclick="petCmd({mood:'happy',hold:40})">&#x1F604; Feliz ^_^</button>
+    <button class="btn sec" onclick="petCmd({mood:'excited',hold:40})">&#x1F929; Empolgado &#x2605;</button>
+    <button class="btn sec" onclick="petCmd({mood:'love',hold:40})">&#x1F60D; Amor &hearts;</button>
+    <button class="btn sec" onclick="petCmd({mood:'cool',hold:45})">&#x1F60E; Cool (&Oacute;culos)</button>
+    <button class="btn sec" onclick="petCmd({mood:'curious',hold:40})">&#x1F9D0; Curioso o_O</button>
+    <button class="btn sec" onclick="petCmd({mood:'surprised',hold:40})">&#x1F632; Surpreso O_O</button>
+    <button class="btn sec" onclick="petCmd({mood:'cyber',hold:40})">&#x1F6A8; Cyber Scan</button>
+    <button class="btn sec" onclick="petCmd({mood:'angry',hold:40})">&#x1F620; Bravo &gt;_&lt;</button>
+    <button class="btn sec" onclick="petCmd({mood:'tired',hold:45})">&#x1F971; Sonolento</button>
+    <button class="btn sec" onclick="petCmd({mood:'sleep',hold:180})">&#x1F634; Dormir zZz</button>
+   </div>
+  </div>
+
+  <div class="card">
+   <h2>&#x1F4AC; Bal&atilde;o de Fala &amp; Mensagens na Tela</h2>
+   <label>Digite o que o DhexterBot deve falar (a boca mexe sincronizada!)</label>
+   <input id="petSayInput" type="text" maxlength="44" placeholder="Ex: Bora tomar um cafe! / Deploy finalizado!">
+   <div class="row" style="margin-top:8px">
+    <div><label>Express&atilde;o ao falar</label>
+     <select id="petSayMood">
+      <option value="happy">Feliz ^_^</option>
+      <option value="excited">Empolgado &#x2605;</option>
+      <option value="cool">Cool (&Oacute;culos) &#x1F60E;</option>
+      <option value="love">Apaixonado &hearts;</option>
+      <option value="normal">Normal</option>
+      <option value="curious">Curioso o_O</option>
+      <option value="surprised">Surpreso O_O</option>
+      <option value="cyber">Cyber Scanner</option>
+      <option value="angry">Bravo / Alerta &gt;_&lt;</option>
+     </select>
+    </div>
+    <div style="flex:0 0 120px"><label>Dura&ccedil;&atilde;o (s)</label><input id="petSayTtl" type="number" min="5" max="300" value="25"></div>
+   </div>
+   <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px">
+    <button class="btn" onclick="petSendSay()">&#x1F4AC; Falar Agora</button>
+    <button class="btn sec" onclick="petQuickSay('Hora do cafezinho!','happy')">&#x2615; Hora do caf&eacute;</button>
+    <button class="btn sec" onclick="petQuickSay('Deploy 100% concluido!','excited')">&#x1F680; Deploy OK</button>
+    <button class="btn sec" onclick="petQuickSay('Modo foco ativado!','cool')">&#x1F60E; Modo Foco</button>
+    <button class="btn sec" onclick="petQuickSay('Alerta! Verificar NOC!','angry')">&#x1F6A8; Alerta NOC</button>
+   </div>
+  </div>
+
+  <div class="card">
+   <div class="row">
+    <div>
+     <h2>&#x1F345; Timer Pomodoro de Bancada</h2>
+     <div class="muted" id="pomoStatus" style="margin-bottom:8px">Timer parado</div>
+     <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <button class="btn sec" onclick="petCmd({pomodoro:25})">&#x1F345; Foco 25m</button>
+      <button class="btn sec" onclick="petCmd({pomodoro:50})">&#x1F525; Foco 50m</button>
+      <button class="btn sec" onclick="petCmd({pomodoro:5})">&#x2615; Pausa 5m</button>
+      <button class="btn danger" onclick="petCmd({pomodoro:0})">&#x23F9; Parar</button>
+     </div>
+     <small class="hint">Durante o Pomodoro o DhexterBot coloca o Headset NOC automaticamente e comemora quando o tempo zera!</small>
+    </div>
+    <div>
+     <h2>&#x1F579;&#xFE0F; Joystick de Pupilas</h2>
+     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:210px">
+      <button class="btn sec" onclick="petCmd({gx:-14,gy:-8})">&#x2196;</button>
+      <button class="btn sec" onclick="petCmd({gx:0,gy:-10})">&#x2191;</button>
+      <button class="btn sec" onclick="petCmd({gx:14,gy:-8})">&#x2197;</button>
+      <button class="btn sec" onclick="petCmd({gx:-18,gy:0})">&#x2190;</button>
+      <button class="btn sec" onclick="petCmd({gx:0,gy:0})">&#x23FA;</button>
+      <button class="btn sec" onclick="petCmd({gx:18,gy:0})">&#x2192;</button>
+      <button class="btn sec" onclick="petCmd({gx:-14,gy:8})">&#x2199;</button>
+      <button class="btn sec" onclick="petCmd({gx:0,gy:10})">&#x2193;</button>
+      <button class="btn sec" onclick="petCmd({gx:14,gy:8})">&#x2198;</button>
+     </div>
+    </div>
+   </div>
+  </div>
+ </section>
+
+ <!-- TAB 2: SISTEMAS & NOC -->
+ <section id="noc" class="tab">
+  <div class="card">
+   <h2>&#x1F6E1;&#xFE0F; Status ao Vivo dos Sistemas Monitorados</h2>
+   <div id="nocLiveList" class="muted">Carregando status...</div>
+   <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sec" onclick="petCmd({checkSystems:true})">&#x1F504; Testar Conectividade Agora</button>
+    <button class="btn sec" onclick="petCmd({viewMode:2})">&#x1F4FA; Mostrar Painel NOC na Telinha</button>
+    <button class="btn sec" onclick="petCmd({alertSource:'ZABBIX',alertMsg:'Simulacao: Link WAN Caiu!',alertCount:1})">&#x1F6A8; Simular Alerta</button>
+    <button class="btn sec" onclick="petCmd({alertSource:'ZABBIX',alertMsg:'Sistemas Normalizados!',alertCount:0})">&#x2705; Simular Recupera&ccedil;&atilde;o</button>
+   </div>
+  </div>
+
+  <div class="card">
+   <h2>&#x1F50C; Watchdog TCP / Rede (O DhexterBot vigia sozinho via Wi-Fi)</h2>
+   <small class="hint" style="margin-bottom:10px">O pr&oacute;prio ESP8266 testa a porta TCP de cada host periodicamente. Se algum cair, o DhexterBot fica bravo (<code>&gt;_&lt;</code>) e avisa na tela; quando voltar, ele comemora!</small>
+   <div id="watchRows"></div>
+   <label style="margin-top:10px">Intervalo do Watchdog (segundos)</label>
+   <input id="sysPollSec" type="number" min="10" max="600" value="30">
+  </div>
+
+  <div class="card">
+   <h2>&#x1F4CA; Conector Nativo Zabbix API (JSON-RPC)</h2>
+   <div class="chk"><input id="zbxEnabled" type="checkbox"><label>Consultar API do Zabbix diretamente pela SmallTV (<code>problem.get</code>)</label></div>
+   <label>URL da API JSON-RPC do Zabbix</label>
+   <input id="zbxUrl" type="url" placeholder="http://10.10.1.26/api_jsonrpc.php">
+   <div class="row">
+    <div>
+     <label>Token de API Zabbix</label>
+     <input id="zbxToken" type="password" autocomplete="off" placeholder="(manter token salvo)">
+    </div>
+    <div style="flex:0 0 180px">
+     <label>Severidade M&iacute;nima</label>
+     <select id="zbxMinSev">
+      <option value="2">2 - Warning (aten&ccedil;&atilde;o)</option>
+      <option value="3">3 - Average (m&eacute;dia)</option>
+      <option value="4">4 - High (alta)</option>
+      <option value="5">5 - Disaster (desastre)</option>
+     </select>
+    </div>
+   </div>
+   <small class="hint">Quando ativado e na mesma rede do Zabbix (ex: <code>10.10.1.26</code>), o DhexterBot consulta os problemas ativos e reage sozinho!</small>
+   <div style="margin-top:14px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Configura&ccedil;&otilde;es de Sistemas</button></div>
+  </div>
+
+  <div class="card">
+   <h2>&#x1F517; Webhook &amp; Integra&ccedil;&atilde;o Externa (Scripts / Zabbix / Grafana)</h2>
+   <small class="hint">Qualquer script ou sistema pode controlar o DhexterBot enviando JSON para <code>POST http://10.0.15.235/api/pet</code>:<br><br>
+   <b>1. Enviar Alerta de Sistema / Zabbix:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/pet -d '{"alertSource":"ZABBIX","alertMsg":"SW02 BAMEX Offline!","alertCount":1}'</code><br><br>
+   <b>2. Comemorar Recupera&ccedil;&atilde;o / Deploy:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/pet -d '{"action":"celebrate","say":"Deploy em Producao OK!"}'</code><br><br>
+   <b>3. Dar Caf&eacute; via Script:</b><br>
+   <code>curl -X POST http://10.0.15.235/api/pet -d '{"action":"coffee"}'</code>
+   </small>
+  </div>
+ </section>
+
+ <!-- TAB 3: PERSONALIDADE & TELA -->
+ <section id="display" class="tab">
+  <div class="card">
+   <h2>&#x1F916; Identidade, Rosto &amp; Acess&oacute;rios do DhexterBot</h2>
+   <div class="row">
+    <div><label>Nome no Topo da Tela (HUD)</label><input id="petName" type="text" maxlength="14" placeholder="DHEXTERBOT"></div>
+    <div><label>Frase Padr&atilde;o do Rodap&eacute;</label><input id="petStatusText" type="text" maxlength="40" placeholder="DhexterBot 2.0 Online!"></div>
+   </div>
+   <div class="row">
+    <div><label>Cor Neon Principal</label>
+     <select id="petColorPreset">
+      <option value="0">Ciano El&eacute;trico (Cozmo / Emo)</option>
+      <option value="1">Verde Matrix (Pip-Boy)</option>
+      <option value="2">Roxo Cyberpunk</option>
+      <option value="3">&Acirc;mbar Dourado (Wall-E)</option>
+      <option value="4">Azul Gelo Cristal</option>
+      <option value="5">Vermelho Sith / KITT</option>
+      <option value="6">Branco Puro Minimalista</option>
+     </select>
+    </div>
+    <div><label>Acess&oacute;rio Fixo do Rob&ocirc;</label>
+     <select id="petAccessory">
+      <option value="0">Sem acess&oacute;rio fixo</option>
+      <option value="1">&#x1F60E; &Oacute;culos Escuros (Deal With It)</option>
+      <option value="2">&#x1F3A7; Headset Operador NOC (com Microfone)</option>
+      <option value="3">&#x1F4E1; Antena Rob&oacute;tica Luminosa no Topo</option>
+      <option value="4">&#x1F451; Coroa Pixel Dourada</option>
+     </select>
+    </div>
+   </div>
+   <div class="row">
+    <div><label>Modo de Visualiza&ccedil;&atilde;o Padr&atilde;o</label>
+     <select id="petViewMode">
+      <option value="0">&#x1F916; Rosto Completo + Bal&atilde;o + Barras Tamagotchi</option>
+      <option value="1">&#x1F552; Rel&oacute;gio Digital Gigante + DhexterBot</option>
+      <option value="2">&#x1F6E1;&#xFE0F; Matriz Guardi&atilde;o NOC + DhexterBot</option>
+     </select>
+    </div>
+    <div><label>N&iacute;vel de Energia / Movimento</label>
+     <select id="petActivity">
+      <option value="0">Calmo &amp; Suave</option>
+      <option value="1">Normal (Equilibrado)</option>
+      <option value="2">Hiperativo &amp; Brincalh&atilde;o</option>
+     </select>
+    </div>
+   </div>
+   <div class="chk" style="margin-top:10px"><input id="petShowMouth" type="checkbox"><label>Mostrar <b>Boca Animada Expressiva</b> (sorri e mexe enquanto fala)</label></div>
+   <div class="chk"><input id="petShowBlush" type="checkbox"><label>Mostrar <b>Bochechas Coradas (Blush)</b> quando feliz, apaixonado ou recebendo cafun&eacute;</label></div>
+   <div class="chk"><input id="petWeatherFx" type="checkbox"><label>Ativar <b>Clima Reativo na Tela</b> (gotinhas de chuva quando chove na sua cidade)</label></div>
+   <div class="chk"><input id="petScanlines" type="checkbox"><label>Efeito Scanlines CRT retr&ocirc; nos olhos do rob&ocirc;</label></div>
+   <div class="chk"><input id="petShowHud" type="checkbox"><label>Mostrar barra superior (Nome, Status NOC, Temperatura e Rel&oacute;gio)</label></div>
+   <div class="chk"><input id="petShowFooter" type="checkbox"><label>Mostrar bal&atilde;o de fala e barras de vida no rodap&eacute;</label></div>
+   <div class="chk"><input id="petAutoSleep" type="checkbox"><label>Dormir automaticamente (<code>zZz</code>) de madrugada</label></div>
+  </div>
+
+  <div class="card">
+   <h2>&#x1F324;&#xFE0F; Clima Aut&ocirc;nomo (Open-Meteo) &amp; Rel&oacute;gio NTP</h2>
+   <div class="row">
+    <div><label>Latitude</label><input id="petLat" type="number" step="0.0001" placeholder="-23.5505"></div>
+    <div><label>Longitude</label><input id="petLon" type="number" step="0.0001" placeholder="-46.6333"></div>
+   </div>
+   <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sec" onclick="sv('petLat',-23.5505);sv('petLon',-46.6333);toast('Coordenadas: Sao Paulo Capital')">&#x1F4CD; S&atilde;o Paulo Capital</button>
+    <button class="btn sec" onclick="sv('petLat',-23.4440);sv('petLon',-46.8350);toast('Coordenadas: Tambore / Santana de Parnaiba')">&#x1F4CD; Tambor&eacute; / Santana de Parna&iacute;ba</button>
+   </div>
+   <label style="margin-top:12px">Fuso Hor&aacute;rio (NTP)</label>
+   <select id="tz"></select>
+   <div class="muted" id="clockNow" style="margin:8px 0">Rel&oacute;gio: -</div>
+   <div class="chk"><input id="nightEnabled" type="checkbox"><label>Reduzir brilho da tela automaticamente &agrave; noite</label></div>
+   <div class="row">
+    <div><label>In&iacute;cio</label><input id="nightStart" type="time"></div>
+    <div><label>Fim</label><input id="nightEnd" type="time"></div>
+   </div>
+   <label>Brilho noturno: <span id="nlVal"></span>% <span class="muted">(0 = apagar tela)</span></label>
+   <input id="nightLevel" type="range" min="0" max="100" oninput="nlVal.textContent=this.value">
+  </div>
+
+  <div class="card">
+   <h2>&#x1F4FA; Brilho &amp; Calibra&ccedil;&atilde;o do Display ST7789</h2>
+   <label>Brilho da Tela: <span id="brVal"></span>%</label>
+   <input id="brightness" type="range" min="0" max="100" oninput="brVal.textContent=this.value">
+   <label>Rota&ccedil;&atilde;o da Tela</label>
+   <select id="rotation"><option value="0">0&deg; (Padr&atilde;o)</option><option value="1">90&deg;</option><option value="2">180&deg;</option><option value="3">270&deg;</option></select>
+   <div class="chk"><input id="backlightInverted" type="checkbox"><label>Backlight invertido (padr&atilde;o ESP8266 SmallTV = marcado)</label></div>
+   <div class="row" style="margin-top:8px">
+    <div><label>Ordem RGB</label><select id="colorOrder"><option value="auto">Padr&atilde;o</option><option value="rgb">RGB</option><option value="bgr">BGR</option></select></div>
+    <div style="display:flex;align-items:flex-end"><div class="chk"><input id="colorInvert" type="checkbox"><label>Inverter cores</label></div></div>
+   </div>
+   <label>Vermelho (R): <span id="rgVal"></span>%</label>
+   <input id="rGain" type="range" min="50" max="150" oninput="rgVal.textContent=this.value">
+   <label>Verde (G): <span id="ggVal"></span>%</label>
+   <input id="gGain" type="range" min="50" max="150" oninput="ggVal.textContent=this.value">
+   <label>Azul (B): <span id="bgVal"></span>%</label>
+   <input id="bGain" type="range" min="50" max="150" oninput="bgVal.textContent=this.value">
+   <div style="margin-top:12px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Personalidade &amp; Tela</button></div>
+  </div>
+ </section>
+
+ <!-- TAB 4: WI-FI & SISTEMA -->
+ <section id="system" class="tab">
+  <div class="card"><h2>&#x1F4CA; Diagn&oacute;stico do Hardware</h2><div id="statusBox" class="muted">Carregando...</div></div>
+
+  <div class="card"><h2>&#x1F4F6; Redes Wi-Fi Salvas (2.4 GHz)</h2>
+   <button class="btn sec" onclick="scan()">&#x1F50D; Buscar Redes Wi-Fi</button>
+   <div id="scanList" style="margin-top:8px"></div>
+   <table id="wifiTable" style="margin-top:8px"></table>
+   <button class="btn sec" style="margin-top:10px" onclick="addWifi()">+ Adicionar Rede</button>
+   <div style="margin-top:14px"><button class="btn" onclick="saveWifi()">Salvar Wi-Fi &amp; Reconectar</button></div>
+   <small class="hint">Suporta at&eacute; 4 redes Wi-Fi salvas. Em branco na senha mant&eacute;m a senha j&aacute; gravada na Flash.</small>
+  </div>
+
+  <div class="card"><h2>&#x1F310; Nome na Rede (mDNS) &amp; Hotspot</h2>
+   <div class="row">
+    <div><label>Hostname (<code>http://&lt;nome&gt;.local</code>)</label><input id="hostname" type="text" placeholder="dhexterbot"></div>
+    <div><label>Nome do Hotspot AP de Emerg&ecirc;ncia</label><input id="apSsid" type="text" placeholder="DhexterBot-Setup"></div>
+   </div>
+   <input id="apPass" type="hidden" value="">
+   <input id="apOpen" type="checkbox" checked style="display:none">
+  </div>
+
+  <div class="card"><h2>&#x1F680; Atualiza&ccedil;&atilde;o de Firmware (OTA Seguro)</h2>
+   <input id="fw" type="file" accept=".bin">
+   <div style="margin-top:12px"><button class="btn" onclick="upload()" id="upBtn">Enviar &amp; Gravar firmware.bin</button></div>
+   <div class="bar"><div id="upBar"></div></div>
+   <div id="upMsg" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card"><h2>&#x1F4BE; Backup &amp; Manuten&ccedil;&atilde;o</h2>
+   <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sec" onclick="location.href='/api/export'">Exportar config.json</button>
+    <button class="btn sec" onclick="reboot()">Reiniciar DhexterBot</button>
+    <button class="btn danger" onclick="factory()">Reset de F&aacute;brica</button>
+   </div>
+   <input id="cfgFile" type="file" accept=".json,application/json" style="margin-top:12px">
+   <div style="margin-top:8px"><button class="btn sec" onclick="importCfg()">Importar config.json &amp; Reiniciar</button></div>
+  </div>
+
+  <div class="card"><h2>&#x1F512; Senha do Painel Web (Opcional)</h2>
+   <div class="chk"><input id="authEnabled" type="checkbox"><label>Exigir senha para abrir este painel</label></div>
+   <div class="row">
+    <div><label>Usu&aacute;rio</label><input id="authUser" type="text" autocomplete="off" placeholder="admin"></div>
+    <div><label>Senha</label><input id="authPass" type="password" autocomplete="new-password" placeholder="(inalterada)"></div>
+   </div>
+  </div>
+ </section>
+</main>
+
+<div style="text-align:center;padding:0 0 16px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Todas as Configura&ccedil;&otilde;es</button></div>
+<div style="text-align:center;padding:0 0 26px;font-size:12px">
+ <a id="footRepo" href="https://github.com/IDhexter/Dhexterbot" target="_blank" style="color:var(--acc);text-decoration:none;font-weight:600">GitHub: IDhexter/Dhexterbot</a>
+ <span id="footVer" class="muted"></span>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+var C={};
+function $(id){return document.getElementById(id)}
+function sv(id,v){var e=$(id);if(e)e.value=(v!=null?v:'')}
+function sc(id,v){var e=$(id);if(e)e.checked=!!v}
+function gv(id){var e=$(id);return e?e.value:''}
+function gc(id){var e=$(id);return e?e.checked:false}
+function esc(s){return (''+(s==null?'':s)).replace(/[<>&"]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]})}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2300)}
+function j(url,opt){return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'Falha na requisicao');return d})})}
+
+document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){
+ document.querySelectorAll('nav button').forEach(function(x){x.classList.remove('active')});
+ document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+ b.classList.add('active');$(b.dataset.t).classList.add('active');
+}});
+
+var TZMAP={
+ 'America/Sao_Paulo':'<-03>3','America/Manaus':'<-04>4','America/Belem':'<-03>3',
+ 'America/Fortaleza':'<-03>3','America/Recife':'<-03>3','America/Cuiaba':'<-04>4',
+ 'America/Buenos_Aires':'<-03>3','America/New_York':'EST5EDT,M3.2.0,M11.1.0',
+ 'America/Chicago':'CST6CDT,M3.2.0,M11.1.0','America/Los_Angeles':'PST8PDT,M3.2.0,M11.1.0',
+ 'Europe/Lisbon':'WET0WEST,M3.5.0/1,M10.5.0','Europe/London':'GMT0BST,M3.5.0/1,M10.5.0',
+ 'Europe/Madrid':'CET-1CEST,M3.5.0,M10.5.0/3','Europe/Paris':'CET-1CEST,M3.5.0,M10.5.0/3',
+ 'Asia/Tokyo':'JST-9','UTC':'UTC0'};
+
+function fillTz(){var s=$('tz');if(!s)return;var keys=Object.keys(TZMAP);
+ s.innerHTML=keys.map(function(k){return '<option value="'+k+'">'+k+'</option>'}).join('');}
+
+function setGain(id,lab,v){var n=(v!=null?v:100);sv(id,n);var e=$(lab);if(e)e.textContent=n}
+
+function renderWatchTargets(arr){
+ var box=$('watchRows');if(!box)return;
+ var defaults=[
+  {name:'Internet',host:'1.1.1.1',port:53,enabled:true},
+  {name:'Google DNS',host:'8.8.8.8',port:53,enabled:true},
+  {name:'Zabbix NOC',host:'10.10.1.26',port:80,enabled:false},
+  {name:'Gateway',host:'10.0.15.1',port:80,enabled:false}
+ ];
+ var html='';
+ for(var i=0;i<4;i++){
+  var t=(arr&&arr[i])||defaults[i];
+  html+='<div class="row" style="align-items:center;margin-bottom:8px;background:var(--card2);padding:8px;border-radius:9px;border:1px solid var(--bd)">'+
+   '<div style="flex:0 0 28px"><input type="checkbox" class="wt-en" '+(t.enabled?'checked':'')+'></div>'+
+   '<div><input type="text" class="wt-nm" maxlength="15" placeholder="Nome" value="'+esc(t.name||'')+'"></div>'+
+   '<div style="flex:1.4"><input type="text" class="wt-hs" maxlength="35" placeholder="IP ou Host" value="'+esc(t.host||'')+'"></div>'+
+   '<div style="flex:0 0 90px"><input type="number" class="wt-pt" min="1" max="65535" placeholder="Porta" value="'+(t.port||80)+'"></div>'+
+  '</div>';
+ }
+ box.innerHTML=html;
+}
+
+function collectWatchTargets(){
+ var out=[];
+ document.querySelectorAll('#watchRows .row').forEach(function(r){
+  out.push({
+   enabled:r.querySelector('.wt-en').checked,
+   name:r.querySelector('.wt-nm').value.trim()||'Host',
+   host:r.querySelector('.wt-hs').value.trim(),
+   port:parseInt(r.querySelector('.wt-pt').value)||80
+  });
+ });
+ return out;
+}
+
+function loadConfig(){return j('/api/config').then(function(c){C=c;
+ ['apSsid','hostname'].forEach(function(k){sv(k,c[k]!=null?c[k]:'')});
+ renderWifi(c.wifi||(c.staSsid?[{ssid:c.staSsid,passSet:c.staPassSet}]:[]));
+ sv('brightness',c.brightness); $('brVal').textContent=c.brightness;
+ sv('rotation',c.rotation);
+ sc('backlightInverted',!!c.backlightInverted);
+ var dp=c.display||{};
+ sv('colorOrder',dp.colorOrder||'auto'); sc('colorInvert',!!dp.invert);
+ setGain('rGain','rgVal',dp.rGain); setGain('gGain','ggVal',dp.gGain); setGain('bGain','bgVal',dp.bGain);
+ fillTz(); var ck=c.clock||{};
+ sv('tz',ck.tz||'America/Sao_Paulo'); sc('nightEnabled',!!ck.nightEnabled);
+ sv('nightStart',ck.nightStart||'22:00'); sv('nightEnd',ck.nightEnd||'07:00');
+ sv('nightLevel',ck.nightLevel!=null?ck.nightLevel:0); $('nlVal').textContent=(ck.nightLevel!=null?ck.nightLevel:0);
+
+ var pt=c.pet||{};
+ sv('petName',pt.name||'DHEXTERBOT');
+ sv('petStatusText',pt.statusText||'DhexterBot 2.0 Online!');
+ sv('petColorPreset',pt.colorPreset!=null?pt.colorPreset:0);
+ sv('petAccessory',pt.accessory!=null?pt.accessory:0);
+ sv('petViewMode',pt.viewMode!=null?pt.viewMode:0);
+ sv('petActivity',pt.activity!=null?pt.activity:1);
+ sc('petShowMouth',pt.showMouth!==false);
+ sc('petShowBlush',pt.showBlush!==false);
+ sc('petWeatherFx',pt.weatherFx!==false);
+ sc('petScanlines',pt.scanlines!==false);
+ sc('petShowHud',pt.showHud!==false);
+ sc('petShowFooter',pt.showFooter!==false);
+ sc('petAutoSleep',pt.autoSleep!==false);
+ sv('petLat',pt.lat!=null?pt.lat:-23.5505);
+ sv('petLon',pt.lon!=null?pt.lon:-46.6333);
+ sv('sysPollSec',pt.sysPollSec||30);
+ sc('zbxEnabled',!!pt.zbxEnabled);
+ sv('zbxUrl',pt.zbxUrl||'http://10.10.1.26/api_jsonrpc.php');
+ sv('zbxMinSev',pt.zbxMinSev!=null?pt.zbxMinSev:3);
+ var zt=$('zbxToken'); if(zt){zt.value='';zt.placeholder=pt.zbxTokenSet?'(token salvo na flash)':'Cole o token da API Zabbix';}
+ renderWatchTargets(pt.targets);
+
+ var au=c.auth||{};
+ sc('authEnabled',!!au.enabled); sv('authUser',au.user||'admin');
+ var apw=$('authPass'); if(apw){apw.value='';apw.placeholder=au.passSet?'(inalterada)':'definir senha';}
+})}
+
+function collect(){
+ var _tzn=gv('tz')||'America/Sao_Paulo';
+ var _tzp=(_tzn in TZMAP)?TZMAP[_tzn]:'<-03>3';
+ var pt={
+  name:gv('petName')||'DHEXTERBOT',
+  statusText:gv('petStatusText')||'DhexterBot 2.0 Online!',
+  colorPreset:parseInt(gv('petColorPreset'))||0,
+  accessory:parseInt(gv('petAccessory'))||0,
+  viewMode:parseInt(gv('petViewMode'))||0,
+  activity:parseInt(gv('petActivity'))||0,
+  showMouth:gc('petShowMouth'),
+  showBlush:gc('petShowBlush'),
+  weatherFx:gc('petWeatherFx'),
+  scanlines:gc('petScanlines'),
+  showHud:gc('petShowHud'),
+  showFooter:gc('petShowFooter'),
+  autoSleep:gc('petAutoSleep'),
+  lat:parseFloat(gv('petLat'))||-23.5505,
+  lon:parseFloat(gv('petLon'))||-46.6333,
+  sysPollSec:parseInt(gv('sysPollSec'))||30,
+  zbxEnabled:gc('zbxEnabled'),
+  zbxUrl:gv('zbxUrl'),
+  zbxMinSev:parseInt(gv('zbxMinSev'))||3,
+  targets:collectWatchTargets()
+ };
+ var ztk=gv('zbxToken').trim();
+ if(ztk) pt.zbxToken=ztk;
+
+ var o={
+  mode:'pet',
+  brightness:parseInt(gv('brightness'))||90,
+  rotation:parseInt(gv('rotation'))||0,
+  backlightInverted:gc('backlightInverted'),
+  hostname:gv('hostname')||'dhexterbot',
+  apSsid:gv('apSsid')||'DhexterBot-Setup',
+  display:{colorOrder:gv('colorOrder')||'auto',invert:gc('colorInvert'),
+   rGain:parseInt(gv('rGain'))||100,gGain:parseInt(gv('gGain'))||136,bGain:parseInt(gv('bGain'))||100},
+  clock:{tz:_tzn,tzPosix:_tzp,lang:'pt',nightEnabled:gc('nightEnabled'),
+   nightStart:gv('nightStart')||'22:00',nightEnd:gv('nightEnd')||'07:00',nightLevel:parseInt(gv('nightLevel'))||0},
+  pet:pt,
+  wifi:collectWifi()
+ };
+ if($('authEnabled')){
+  var _a={enabled:gc('authEnabled'),user:gv('authUser')||'admin'};
+  var _ap2=gv('authPass'); if(_ap2)_a.pass=_ap2;
+  o.auth=_a;
+ }
+ return o;
+}
+
+function saveAll(){
+ j('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())})
+ .then(function(r){
+  if(!r.ok){toast(r.error||'Erro ao salvar');return}
+  toast(r.reboot?'Salvo — reiniciando...':'Configuracoes salvas com sucesso!');
+  if(r.reboot)setTimeout(function(){location.reload()},6000);
+  loadPetStatus();loadStatus();
+ }).catch(function(e){toast('Erro: '+e.message)});
+}
+
+function saveWifi(){
+ var o={wifi:collectWifi()};
+ j('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){
+  toast('Wi-Fi salvo! Reiniciando...');j('/api/reboot',{method:'POST'});
+ }).catch(function(e){toast('Erro: '+e.message)});
+}
+
+function renderWifi(arr){var t=$('wifiTable');if(!t)return;t.innerHTML='';arr.forEach(addWifiRow);if(!arr.length)addWifiRow({})}
+function addWifiRow(o){var t=$('wifiTable');var tr=document.createElement('tr');
+ tr.innerHTML='<td style="width:45%"><input class="ws" type="text" autocomplete="off" placeholder="SSID da Rede" value="'+esc(o.ssid||'')+'"></td>'+
+  '<td><input class="wp" type="password" autocomplete="off" placeholder="'+(o.passSet?'(senha salva)':'Senha Wi-Fi')+'"></td>'+
+  '<td style="width:36px"><button class="btn sec" style="padding:7px 11px" onclick="this.closest(\'tr\').remove()">&times;</button></td>';
+ t.appendChild(tr);}
+function addWifi(){if(document.querySelectorAll('#wifiTable tr').length>=4){toast('Maximo 4 redes');return}addWifiRow({})}
+function collectWifi(){var w=[];document.querySelectorAll('#wifiTable tr').forEach(function(tr){
+ var s=tr.querySelector('.ws').value;if(!s.trim())return;
+ var e={ssid:s};var p=tr.querySelector('.wp').value;if(p)e.pass=p;w.push(e);});return w}
+function scanPick(ssid){var rows=document.querySelectorAll('#wifiTable tr');var tr=null;
+ for(var i=0;i<rows.length;i++){if(!rows[i].querySelector('.ws').value.trim()){tr=rows[i];break}}
+ if(!tr){if(rows.length>=4){toast('Maximo 4 redes');return}addWifiRow({});tr=$('wifiTable').lastChild}
+ tr.querySelector('.ws').value=ssid;tr.querySelector('.wp').focus();}
+function scan(){$('scanList').innerHTML='<div class="muted">Escaneando redes 2.4 GHz...</div>';
+ j('/api/scan').then(function(l){var h='';l.sort(function(a,b){return b.rssi-a.rssi});
+  l.forEach(function(n){h+='<div class="net" onclick="scanPick(this.dataset.s)" data-s="'+
+   esc(n.ssid)+'"><span>'+(n.enc?'&#x1F512; ':'')+esc(n.ssid)+'</span><span class="muted">'+n.rssi+' dBm</span></div>'});
+  $('scanList').innerHTML=h||'<div class="muted">Nenhuma rede encontrada</div>';})}
+
+function petCmd(body){
+ j('/api/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){
+  loadPetStatus();
+  if(body.action) toast('Acao enviada: '+body.action.toUpperCase());
+  else if(body.say) toast('Fala enviada para a tela!');
+  else if(body.mood) toast('Humor: '+body.mood.toUpperCase());
+  else if(body.viewMode!=null) toast('Modo de tela alterado!');
+  else if(body.pomodoro!=null) toast(body.pomodoro>0?'Pomodoro iniciado!':'Pomodoro parado');
+  else if(body.checkSystems) toast('Testando sistemas...');
+  else toast('Comando aplicado!');
+ }).catch(function(e){toast('Erro: '+e.message)});
+}
+
+function petSendSay(){
+ var txt=gv('petSayInput').trim();
+ if(!txt){toast('Digite uma frase primeiro!');return;}
+ petCmd({say:txt,mood:gv('petSayMood')||'happy',ttl:parseInt(gv('petSayTtl'))||25});
+}
+function petQuickSay(txt,mood){
+ sv('petSayInput',txt);sv('petSayMood',mood);
+ petCmd({say:txt,mood:mood,ttl:parseInt(gv('petSayTtl'))||25});
+}
+
+function loadPetStatus(){
+ j('/api/pet').then(function(r){
+  $('petLiveMood').textContent=(r.mood||'normal').toUpperCase()+(r.action&&r.action!=='none'?' ['+r.action.toUpperCase()+']':'');
+  $('petLiveTemp').textContent=r.weatherValid?(r.temp.toFixed(1)+' °C'):'sincronizando...';
+  $('petLiveSpeech').textContent=r.speech||'(frases autonomas)';
+  if(r.energy!=null){$('stEnergy').textContent=r.energy+'%';$('barEnergy').style.width=r.energy+'%';}
+  if(r.coffee!=null){$('stCoffee').textContent=r.coffee+'%';$('barCoffee').style.width=r.coffee+'%';}
+  if(r.happiness!=null){$('stHappy').textContent=r.happiness+'%';$('barHappy').style.width=r.happiness+'%';}
+  if(r.level!=null){$('lvBadge').textContent='LV.'+r.level+' ('+(r.xp||0)+' XP)';}
+  if(r.viewMode!=null){
+   sv('petViewMode',r.viewMode);
+   [0,1,2].forEach(function(i){var b=$('vm'+i);if(b)b.className=(r.viewMode===i)?'btn':'btn sec';});
+  }
+  var ps=$('pomoStatus');
+  if(ps){
+   if(r.pomoActive){
+    var m=Math.floor((r.pomoRemSec||0)/60),s=(r.pomoRemSec||0)%60;
+    ps.innerHTML='<b style="color:var(--amber)">&#x1F345; Foco Ativo: '+m+'m '+s+'s restantes</b>';
+   }else ps.textContent='Timer parado';
+  }
+  var nl=$('nocLiveList');
+  if(nl&&r.targets){
+   var h='';
+   r.targets.forEach(function(t){
+    var st=!t.enabled?'<span class="muted">DESATIVADO</span>'
+          :!t.checked?'<span style="color:var(--amber)">TESTANDO...</span>'
+          :t.up?'<span class="badge-up">&#x25CF; ONLINE ('+t.latencyMs+' ms)</span>'
+               :'<span class="badge-down">&#x25B2; OFFLINE / DOWN!</span>';
+    h+='<div class="noc-row"><div><b>'+esc(t.name)+'</b> <span class="muted">('+esc(t.host)+':'+t.port+')</span></div><div>'+st+'</div></div>';
+   });
+   if(r.zbxProblems!=null && r.zbxProblems>=0){
+    h+='<div class="noc-row"><div><b>Zabbix JSON-RPC API</b></div><div>'+(r.zbxProblems>0?'<span class="badge-down">&#x1F6A8; '+r.zbxProblems+' INCIDENTE(S)</span>':'<span class="badge-up">&#x2705; 0 INCIDENTES</span>')+'</div></div>';
+   }
+   nl.innerHTML=h;
+  }
+ }).catch(function(){});
+}
+
+var statusTimer=0;
+function loadStatus(){
+ clearTimeout(statusTimer);
+ j('/api/status').then(function(s){
+  $('dot').className='dot'+(s.connected?' ok':'');
+  $('hi').textContent=s.ip||'';
+  $('footVer').textContent=' v'+s.version;
+  var cn=$('clockNow');
+  if(cn) cn.textContent='Horario NTP: '+(s.synced?(s.time+' ('+s.tz+')'):'sincronizando...');
+  $('statusBox').innerHTML=
+   kv('Firmware',s.fw+' v'+s.version+' ('+s.variant+')')+
+   kv('Rede Wi-Fi',(s.ssid||'-')+' ('+s.rssi+' dBm)')+
+   kv('Endereco IP',s.ip||'-')+
+   kv('mDNS','http://'+(C.hostname||'dhexterbot')+'.local')+
+   kv('Memoria RAM Livre (Heap)',s.heap+' bytes (maior bloco: '+s.maxblk+' B)')+
+   kv('Tempo Ligado (Uptime)',fmtUp(s.uptime))+
+   kv('Ultimo Reset',s.reset||'-');
+  loadPetStatus();
+ }).catch(function(){}).finally(function(){
+  if(!document.hidden) statusTimer=setTimeout(loadStatus,4000);
+ });
+}
+function kv(k,v){return '<div class="kv"><span class="muted">'+k+'</span><b>'+v+'</b></div>'}
+function fmtUp(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return (d?d+'d ':'')+(h?h+'h ':'')+m+'m'}
+
+function importCfg(){var f=$('cfgFile').files[0];if(!f){toast('Selecione um arquivo .json');return}
+ var r=new FileReader();
+ r.onload=function(){var txt=r.result;
+  try{JSON.parse(txt)}catch(e){toast('JSON invalido');return}
+  if(!confirm('Aplicar configuracao e reiniciar?'))return;
+  j('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:txt})
+   .then(function(){toast('Importado! Reiniciando...');setTimeout(function(){location.reload()},7000)})
+   .catch(function(){toast('Falha ao importar')});
+ };
+ r.readAsText(f);}
+
+function reboot(){if(confirm('Reiniciar o DhexterBot?'))j('/api/reboot',{method:'POST'}).then(function(){toast('Reiniciando...')})}
+function factory(){if(confirm('Apagar TODAS as configuracoes e voltar ao padrao de fabrica?'))j('/api/factory',{method:'POST'}).then(function(){toast('Resetando...')})}
+
+function upload(){var f=$('fw').files[0];if(!f){toast('Escolha um arquivo firmware.bin primeiro');return}
+ var fd=new FormData();fd.append('firmware',f,f.name);
+ var x=new XMLHttpRequest();x.open('POST','/update');
+ $('upBtn').disabled=true;
+ x.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);$('upBar').style.width=p+'%';$('upMsg').textContent='Enviando '+p+'%'}};
+ x.onload=function(){$('upBtn').disabled=false;if(x.status==200){$('upMsg').textContent='Sucesso! Reiniciando...';$('upBar').style.width='100%';setTimeout(function(){location.reload()},9000)}else{$('upMsg').textContent='Falha: '+x.responseText}};
+ x.onerror=function(){$('upBtn').disabled=false;$('upMsg').textContent='Erro no upload'};
+ x.send(fd);
+}
+
+loadConfig().then(loadStatus,loadStatus);
+</script>
+</body></html>

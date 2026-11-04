@@ -89,6 +89,14 @@ struct PetSettings {
   char        zbxToken[72];    // Zabbix API token
   uint8_t     zbxMinSev;       // Minimum severity (0..5, default 3=Average)
 
+  // Autonomous Neural Brain (LLM + OAuth PKCE + Hermes Bot Integration)
+  bool        aiEnabled;       // Autonomous neural thoughts enabled
+  uint8_t     aiProvider;      // 0=NVIDIA(Hermes), 1=Hermes Gateway, 2=OpenRouter(OAuth), 3=OpenAI, 4=Gemini, 5=Groq
+  char        aiKey[96];       // API Key or OAuth Bearer token
+  char        aiModel[48];     // Model ID (e.g. nvidia/nemotron-3.5-super-vl-120b-a12b)
+  char        hermesUrl[64];   // Hermes Agent Gateway URL (e.g. http://172.1.0.32:9119)
+  uint16_t    aiIntervalMin;   // Autonomous thought interval in minutes (default 10)
+
   void setDefaults();
   void toJson(JsonObject o, bool includeSecrets = true) const;
   void fromJson(JsonObjectConst o);

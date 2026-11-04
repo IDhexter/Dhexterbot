@@ -244,29 +244,32 @@ static void handleImport() {
   scheduleReboot(800);
 }
 
-// ---- DhexterBot 2.0 Live Interactive & System API (/api/pet) ---------------
+// ---- DhexterBot 2.1 Live Interactive, Neural AI & Hermes Bot API ------------
 static void handlePetGet() {
   if (!requireAuth()) return;
   JsonDocument doc;
   JsonObject o = doc.to<JsonObject>();
-  o["ok"]           = true;
-  o["mood"]         = petMoodName(g_petMode.currentMood());
-  o["forced"]       = petMoodName(g_petMode.forcedMood());
-  o["action"]       = petActionName(g_petMode.currentAction());
-  o["speech"]       = g_petMode.currentSpeech();
-  o["viewMode"]     = S->pet.viewMode;
-  o["weatherValid"] = g_petMode.weatherValid();
-  o["temp"]         = g_petMode.weatherTemp();
-  o["weatherCode"]  = g_petMode.weatherCode();
-  o["energy"]       = g_petMode.energy();
-  o["coffee"]       = g_petMode.coffee();
-  o["happiness"]    = g_petMode.happiness();
-  o["xp"]           = g_petMode.xp();
-  o["level"]        = g_petMode.level();
-  o["pomoActive"]   = g_petMode.pomodoroActive();
-  o["pomoRemSec"]   = g_petMode.pomodoroRemSec();
-  o["zbxProblems"]  = g_petMode.zbxProblems();
-  o["anyDown"]      = g_petMode.anySystemDown(*S);
+  o["ok"]                = true;
+  o["mood"]              = petMoodName(g_petMode.currentMood());
+  o["forced"]            = petMoodName(g_petMode.forcedMood());
+  o["action"]            = petActionName(g_petMode.currentAction());
+  o["speech"]            = g_petMode.currentSpeech();
+  o["speechSource"]      = g_petMode.speechSource();
+  o["lastAiReply"]       = g_petMode.lastAiReply();
+  o["aiThoughtsCount"]   = g_petMode.aiThoughtsCount();
+  o["hermesEventsCount"] = g_petMode.hermesEventsCount();
+  o["aiEnabled"]         = S->pet.aiEnabled;
+  o["aiProvider"]        = S->pet.aiProvider;
+  o["aiModel"]           = S->pet.aiModel;
+  o["hermesUrl"]         = S->pet.hermesUrl;
+  o["viewMode"]          = S->pet.viewMode;
+  o["weatherValid"]      = g_petMode.weatherValid();
+  o["temp"]              = g_petMode.weatherTemp();
+  o["weatherCode"]       = g_petMode.weatherCode();
+  o["pomoActive"]        = g_petMode.pomodoroActive();
+  o["pomoRemSec"]        = g_petMode.pomodoroRemSec();
+  o["zbxProblems"]       = g_petMode.zbxProblems();
+  o["anyDown"]           = g_petMode.anySystemDown(*S);
 
   JsonArray tarr = o["targets"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_WATCH_TARGETS; i++) {
@@ -319,7 +322,8 @@ static void handlePetPost() {
   if (doc["say"].is<const char*>()) {
     const char* txt = doc["say"].as<const char*>();
     PetMood m = doc["mood"].is<const char*>() ? (PetMood)petMoodFromStr(doc["mood"].as<const char*>()) : PET_MOOD_AUTO;
-    g_petMode.triggerSay(txt, m, ttlSec);
+    const char* src = doc["source"] | "WEB UI";
+    g_petMode.triggerSay(txt, m, ttlSec, src);
   }
   if (doc["blink"] | false) {
     g_petMode.triggerBlink();
@@ -342,15 +346,82 @@ static void handlePetPost() {
   }
 
   JsonDocument res;
-  res["ok"]        = true;
-  res["mood"]      = petMoodName(g_petMode.currentMood());
-  res["action"]    = petActionName(g_petMode.currentAction());
-  res["speech"]    = g_petMode.currentSpeech();
-  res["viewMode"]  = S->pet.viewMode;
-  res["energy"]    = g_petMode.energy();
-  res["coffee"]    = g_petMode.coffee();
-  res["happiness"] = g_petMode.happiness();
-  res["level"]     = g_petMode.level();
+  res["ok"]          = true;
+  res["mood"]        = petMoodName(g_petMode.currentMood());
+  res["action"]      = petActionName(g_petMode.currentAction());
+  res["speech"]      = g_petMode.currentSpeech();
+  res["lastAiReply"] = g_petMode.lastAiReply();
+  res["viewMode"]    = S->pet.viewMode;
+  sendJson(res);
+}
+
+static void handleAiChat() {
+  if (!requireAuth()) return;
+  JsonDocument doc;
+  if (server.hasArg("plain")) {
+    deserializeJson(doc, server.arg("plain"));
+  }
+
+  // Save OAuth PKCE key if returned from OpenRouter OAuth flow
+  if (doc["oauthKey"].is<const char*>()) {
+    const char* k = doc["oauthKey"].as<const char*>();
+    if (k && k[0]) {
+      strlcpy(S->pet.aiKey, k, sizeof(S->pet.aiKey));
+      S->pet.aiProvider = 2; // OpenRouter OAuth
+      if (!S->pet.aiModel[0] || strstr(S->pet.aiModel, "nvidia") != nullptr) {
+        strlcpy(S->pet.aiModel, "openai/gpt-4o-mini", sizeof(S->pet.aiModel));
+      }
+      S->pet.aiEnabled = true;
+      saveSettings(*S);
+    }
+  }
+
+  const char* prompt = doc["prompt"] | "";
+  const char* src    = (prompt && prompt[0]) ? "CHAT IA" : "IA NEURAL";
+  bool ok = g_petMode.triggerNeuralThought(*S, (prompt && prompt[0]) ? prompt : nullptr, src);
+
+  JsonDocument res;
+  res["ok"]              = ok;
+  res["reply"]           = g_petMode.lastAiReply();
+  res["speech"]          = g_petMode.currentSpeech();
+  res["mood"]            = petMoodName(g_petMode.currentMood());
+  res["aiThoughtsCount"] = g_petMode.aiThoughtsCount();
+  sendJson(res);
+}
+
+// External Webhook for Hermes Bot (Proxmox LXC 100 / Wazuh SOC / Telegram Bridge)
+static void handleHermesWebhook() {
+  String eventType = server.arg("event");
+  String message   = server.arg("msg");
+  String moodStr   = server.arg("mood");
+  int alertCount   = server.hasArg("alerts") ? server.arg("alerts").toInt() : -1;
+
+  if (server.hasArg("plain") && server.arg("plain").length() > 0) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, server.arg("plain"))) {
+      if (doc["event"].is<const char*>())   eventType = doc["event"].as<const char*>();
+      if (doc["message"].is<const char*>()) message   = doc["message"].as<const char*>();
+      else if (doc["say"].is<const char*>()) message  = doc["say"].as<const char*>();
+      if (doc["mood"].is<const char*>())    moodStr   = doc["mood"].as<const char*>();
+      if (doc["alerts"].is<int>())          alertCount = doc["alerts"].as<int>();
+    }
+  }
+
+  bool ok = true;
+  if (eventType.equalsIgnoreCase("ask") && message.length() > 0) {
+    ok = g_petMode.triggerNeuralThought(*S, message.c_str(), "HERMES AI");
+  } else {
+    g_petMode.pushHermesEvent(eventType.c_str(), message.c_str(), moodStr.c_str(), alertCount);
+  }
+
+  JsonDocument res;
+  res["ok"]                = ok;
+  res["agent"]             = "DhexterBot-NOC-CyberGirl";
+  res["mood"]              = petMoodName(g_petMode.currentMood());
+  res["speech"]            = g_petMode.currentSpeech();
+  res["lastAiReply"]       = g_petMode.lastAiReply();
+  res["hermesEventsCount"] = g_petMode.hermesEventsCount();
+  res["zbxProblems"]       = g_petMode.zbxProblems();
   sendJson(res);
 }
 
@@ -451,6 +522,9 @@ void webPortalBegin(Settings& settings) {
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/pet", HTTP_GET, handlePetGet);
   server.on("/api/pet", HTTP_POST, handlePetPost);
+  server.on("/api/ai/chat", HTTP_POST, handleAiChat);
+  server.on("/api/hermes/webhook", HTTP_GET, handleHermesWebhook);
+  server.on("/api/hermes/webhook", HTTP_POST, handleHermesWebhook);
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/factory", HTTP_POST, handleFactory);

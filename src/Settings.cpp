@@ -188,17 +188,24 @@ void PetSettings::setDefaults() {
   strlcpy(targets[2].name, "Zabbix NOC", sizeof(targets[2].name));
   strlcpy(targets[2].host, "10.10.1.26", sizeof(targets[2].host));
   targets[2].port = 80;
-  targets[2].enabled = false;
+  targets[2].enabled = true;
 
-  strlcpy(targets[3].name, "Gateway", sizeof(targets[3].name));
-  strlcpy(targets[3].host, "10.0.15.1", sizeof(targets[3].host));
-  targets[3].port = 80;
+  strlcpy(targets[3].name, "Hermes Wazuh", sizeof(targets[3].name));
+  strlcpy(targets[3].host, "172.17.0.40", sizeof(targets[3].host));
+  targets[3].port = 22;
   targets[3].enabled = false;
 
   zbxEnabled  = false;
   strlcpy(zbxUrl, "http://10.10.1.26/api_jsonrpc.php", sizeof(zbxUrl));
   zbxToken[0] = 0;
   zbxMinSev   = 3;
+
+  aiEnabled     = true;
+  aiProvider    = 0; // 0 = NVIDIA NIM (Hermes Wazuh Engine)
+  strlcpy(aiKey, "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", sizeof(aiKey));
+  strlcpy(aiModel, "nvidia/nemotron-3.5-super-vl-120b-a12b", sizeof(aiModel));
+  strlcpy(hermesUrl, "http://172.1.0.32:9119", sizeof(hermesUrl));
+  aiIntervalMin = 10;
 }
 
 void PetSettings::toJson(JsonObject o, bool includeSecrets) const {
@@ -225,6 +232,16 @@ void PetSettings::toJson(JsonObject o, bool includeSecrets) const {
     o["zbxToken"] = zbxToken;
   } else {
     o["zbxTokenSet"] = (zbxToken[0] != 0);
+  }
+  o["aiEnabled"]     = aiEnabled;
+  o["aiProvider"]    = aiProvider;
+  o["aiModel"]       = aiModel;
+  o["hermesUrl"]     = hermesUrl;
+  o["aiIntervalMin"] = aiIntervalMin;
+  if (includeSecrets) {
+    o["aiKey"] = aiKey;
+  } else {
+    o["aiKeySet"] = (aiKey[0] != 0);
   }
   JsonArray arr = o["targets"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_WATCH_TARGETS; i++) {
@@ -275,6 +292,25 @@ void PetSettings::fromJson(JsonObjectConst o) {
     if (tk.length() > 0) strlcpy(zbxToken, tk.c_str(), sizeof(zbxToken));
   }
   if (o["zbxMinSev"].is<int>()) zbxMinSev = (uint8_t)constrain(o["zbxMinSev"].as<int>(), 0, 5);
+
+  if (o["aiEnabled"].is<bool>()) aiEnabled = o["aiEnabled"].as<bool>();
+  if (o["aiProvider"].is<int>()) aiProvider = (uint8_t)constrain(o["aiProvider"].as<int>(), 0, 5);
+  if (o["aiKey"].is<const char*>()) {
+    String k = o["aiKey"].as<const char*>();
+    k.trim();
+    if (k.length() > 0) strlcpy(aiKey, k.c_str(), sizeof(aiKey));
+  }
+  if (o["aiModel"].is<const char*>()) {
+    String m = o["aiModel"].as<const char*>();
+    m.trim();
+    if (m.length() > 0) strlcpy(aiModel, m.c_str(), sizeof(aiModel));
+  }
+  if (o["hermesUrl"].is<const char*>()) {
+    String h = o["hermesUrl"].as<const char*>();
+    h.trim();
+    if (h.length() > 0) strlcpy(hermesUrl, h.c_str(), sizeof(hermesUrl));
+  }
+  if (o["aiIntervalMin"].is<int>()) aiIntervalMin = (uint16_t)constrain(o["aiIntervalMin"].as<int>(), 0, 240);
 
   if (o["targets"].is<JsonArrayConst>()) {
     JsonArrayConst arr = o["targets"].as<JsonArrayConst>();

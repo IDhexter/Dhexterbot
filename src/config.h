@@ -8,7 +8,7 @@
 // Firmware Identity
 // ---------------------------------------------------------------------------
 #define FW_NAME       "DhexterBot"
-#define FW_VERSION    "2.0.0"
+#define FW_VERSION    "2.1.0"
 #define REPO_URL      "https://github.com/IDhexter/Dhexterbot"
 #define REPO_OWNER    "IDhexter"
 #define REPO_NAME     "Dhexterbot"

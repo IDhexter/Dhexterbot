@@ -1,4 +1,4 @@
-// PetMode.cpp — DhexterBot 2.0: Charismatic Desk Companion & NOC System Guardian
+// PetMode.cpp — DhexterBot 2.1: NOC Cyber Girl (Super Expressive Anime) + Neural AI & Hermes Bot
 // Repository: https://github.com/IDhexter/Dhexterbot
 #include "PetMode.h"
 #include "Gfx.h"
@@ -10,9 +10,11 @@
 #if defined(SMALLTV_ESP8266)
   #include <ESP8266HTTPClient.h>
   #include <WiFiClient.h>
+  #include <WiFiClientSecureBearSSL.h>
 #else
   #include <HTTPClient.h>
   #include <WiFiClient.h>
+  #include <WiFiClientSecure.h>
 #endif
 #include <math.h>
 
@@ -44,7 +46,7 @@ uint8_t petMoodFromStr(const char* s) {
   if (v.equalsIgnoreCase("curious"))   return PET_MOOD_CURIOUS;
   if (v.equalsIgnoreCase("surprised")) return PET_MOOD_SURPRISED;
   if (v.equalsIgnoreCase("love"))      return PET_MOOD_LOVE;
-  if (v.equalsIgnoreCase("cyber"))     return PET_MOOD_CYBER;
+  if (v.equalsIgnoreCase("cyber") || v.equalsIgnoreCase("neural") || v.equalsIgnoreCase("hermes")) return PET_MOOD_CYBER;
   if (v.equalsIgnoreCase("tired"))     return PET_MOOD_TIRED;
   if (v.equalsIgnoreCase("sleep"))     return PET_MOOD_SLEEP;
   if (v.equalsIgnoreCase("cool"))      return PET_MOOD_COOL;
@@ -76,11 +78,13 @@ uint8_t petActionFromStr(const char* s) {
 
 static uint16_t presetColor565(uint8_t preset, uint8_t activeMood, uint8_t activeAction) {
   if (activeAction == PET_ACT_HACKER) return 0x07EC; // Matrix Green
-  if (activeMood == PET_MOOD_ANGRY)   return 0xF924; // Alert Red-Orange
-  if (activeMood == PET_MOOD_LOVE)    return 0xF993; // Hot Pink / Coral
-  if (activeMood == PET_MOOD_EXCITED) return 0xFFE0; // Golden Star Yellow
+  if (activeMood == PET_MOOD_ANGRY)   return 0xF924; // Alert Red-Crimson
+  if (activeMood == PET_MOOD_LOVE)    return 0xF993; // Hot Pink
+  if (activeMood == PET_MOOD_EXCITED) return 0xFFE0; // Golden Star
+  if (activeMood == PET_MOOD_CYBER)   return 0xB33F; // Neural Purple-Cyan
+  if (activeMood == PET_MOOD_HAPPY)   return 0x07EC; // Emerald UP Green
   switch (preset) {
-    case 0:  return 0x073F; // Electric Cyan (Cozmo / Emo)
+    case 0:  return 0x073F; // Electric Cyan (NOC Girl Signature Neon)
     case 1:  return 0x07EC; // Matrix Neon Green
     case 2:  return 0xB33F; // Cyber Purple
     case 3:  return 0xFD60; // Amber Gold
@@ -101,6 +105,38 @@ static uint16_t scaleColor565(uint16_t c, uint8_t pct) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
+// Helper to sanitize UTF-8 Portuguese accents to clean ASCII for the 5x7 bitmap font
+static void sanitizeAscii(const char* in, char* out, size_t maxLen) {
+  if (!in || maxLen == 0) {
+    if (maxLen > 0) out[0] = 0;
+    return;
+  }
+  size_t j = 0;
+  for (size_t i = 0; in[i] != 0 && j + 1 < maxLen; i++) {
+    uint8_t c = (uint8_t)in[i];
+    if (c == 0xC3 && in[i + 1] != 0) {
+      uint8_t n = (uint8_t)in[++i];
+      char rep = 0;
+      if (n >= 0xA0 && n <= 0xA5) rep = 'a';
+      else if (n >= 0x80 && n <= 0x85) rep = 'A';
+      else if (n >= 0xA8 && n <= 0xAB) rep = 'e';
+      else if (n >= 0x88 && n <= 0x8B) rep = 'E';
+      else if (n >= 0xAC && n <= 0xAF) rep = 'i';
+      else if (n >= 0x8C && n <= 0x8F) rep = 'I';
+      else if (n >= 0xB2 && n <= 0xB6) rep = 'o';
+      else if (n >= 0x92 && n <= 0x96) rep = 'O';
+      else if (n >= 0xB9 && n <= 0xBC) rep = 'u';
+      else if (n >= 0x99 && n <= 0x9C) rep = 'U';
+      else if (n == 0xA7) rep = 'c';
+      else if (n == 0x87) rep = 'C';
+      if (rep) out[j++] = rep;
+    } else if (c >= 32 && c <= 126) {
+      out[j++] = (char)c;
+    }
+  }
+  out[j] = 0;
+}
+
 void PetMode::begin(const Settings& s) {
   _fullRepaint   = true;
   _hudDirty      = true;
@@ -112,7 +148,8 @@ void PetMode::begin(const Settings& s) {
   _nextPhraseMs  = millis() + 12000;
   _lastWeatherMs = 0;
   _lastSysCheckMs = 0;
-  _lastDecayMs   = millis();
+  _lastAiMs      = millis();
+  _pendingAutoAi = true; // Trigger first autonomous greeting shortly after boot!
   for (uint8_t i = 0; i < MAX_WATCH_TARGETS; i++) {
     _targetStatus[i].checked   = false;
     _targetStatus[i].up        = true;
@@ -145,26 +182,15 @@ void PetMode::triggerAction(uint8_t action, uint16_t holdSec) {
   _activeAction = action;
   _actionUntil  = (action == PET_ACT_NONE) ? 0 : (millis() + (uint32_t)holdSec * 1000UL);
   if (action == PET_ACT_COFFEE) {
-    _coffee    = (uint8_t)min(100, (int)_coffee + 45);
-    _energy    = (uint8_t)min(100, (int)_energy + 30);
-    _happiness = (uint8_t)min(100, (int)_happiness + 15);
-    _xp       += 10;
-    triggerSay("Hmm! Cafezinho top! +Energia!", PET_MOOD_HAPPY, holdSec);
+    triggerSay("Cafezinho especial do plantao NOC! Energia a mil!", PET_MOOD_HAPPY, holdSec, "NOC-GIRL");
   } else if (action == PET_ACT_CHARGE) {
-    _energy    = 100;
-    _xp       += 10;
-    triggerSay("Bateria 100% recarregada!", PET_MOOD_CYBER, holdSec);
+    triggerSay("Headphones neon e sistemas em potencia maxima!", PET_MOOD_CYBER, holdSec, "NOC-GIRL");
   } else if (action == PET_ACT_PETTING) {
-    _happiness = 100;
-    _xp       += 15;
-    triggerSay("Adoro cafune! Voce e demais!", PET_MOOD_LOVE, holdSec);
+    triggerSay("Obrigada pelo carinho! Pronta para vigiar a rede!", PET_MOOD_LOVE, holdSec, "NOC-GIRL");
   } else if (action == PET_ACT_HACKER) {
-    _xp       += 12;
-    triggerSay("Varrendo pacotes na rede...", PET_MOOD_CYBER, holdSec);
+    triggerSay("Analisando pacotes dos switches Aruba e links WAN...", PET_MOOD_CYBER, holdSec, "NOC-GIRL");
   } else if (action == PET_ACT_CELEBRATE) {
-    _happiness = 100;
-    _xp       += 20;
-    triggerSay("UHUUUL! Tudo comemorando!", PET_MOOD_EXCITED, holdSec);
+    triggerSay("Zero perda de pacotes! Todos os links 100% UP!", PET_MOOD_EXCITED, holdSec, "NOC-GIRL");
   }
   _hudDirty    = true;
   _footerDirty = true;
@@ -176,12 +202,13 @@ void PetMode::triggerBlink() {
   _doubleBlink  = true;
 }
 
-void PetMode::triggerSay(const char* text, uint8_t mood, uint16_t ttlSec) {
+void PetMode::triggerSay(const char* text, uint8_t mood, uint16_t ttlSec, const char* source) {
   if (!text || !text[0]) {
     _speechActive  = false;
     _speechText[0] = 0;
   } else {
-    strlcpy(_speechText, text, sizeof(_speechText));
+    sanitizeAscii(text, _speechText, sizeof(_speechText));
+    strlcpy(_speechSource, (source && source[0]) ? source : "NOC-GIRL", sizeof(_speechSource));
     _speechActive = true;
     if (ttlSec < 2)   ttlSec = 2;
     if (ttlSec > 300) ttlSec = 300;
@@ -194,8 +221,8 @@ void PetMode::triggerSay(const char* text, uint8_t mood, uint16_t ttlSec) {
 }
 
 void PetMode::triggerGaze(int8_t gx, int8_t gy, uint16_t holdMs) {
-  _tgtX       = constrain((int)gx, -28, 28);
-  _tgtY       = constrain((int)gy, -16, 16);
+  _tgtX       = constrain((int)gx, -22, 22);
+  _tgtY       = constrain((int)gy, -12, 12);
   _gazeForced = true;
   _gazeUntil  = millis() + holdMs;
 }
@@ -210,9 +237,9 @@ void PetMode::startPomodoro(uint16_t minutes) {
   _pomoTotalMs = (uint32_t)minutes * 60000UL;
   _pomoEndMs   = millis() + _pomoTotalMs;
   _lastPomoSec = 0xFFFF;
-  char msg[44];
-  snprintf(msg, sizeof(msg), "Modo Foco %um iniciado! Vamos la!", (unsigned)minutes);
-  triggerSay(msg, PET_MOOD_COOL, 10);
+  char msg[64];
+  snprintf(msg, sizeof(msg), "Modo Foco %um ativado! Fones no maximo!", (unsigned)minutes);
+  triggerSay(msg, PET_MOOD_COOL, 12, "FOCO");
   _hudDirty    = true;
   _footerDirty = true;
 }
@@ -238,17 +265,38 @@ void PetMode::forceSystemCheck() {
 void PetMode::pushExternalAlert(const char* source, const char* message, int alertsCount) {
   _zbxProblems = alertsCount;
   if (alertsCount > 0) {
-    char msg[48];
+    char msg[68];
     if (message && message[0]) {
       strlcpy(msg, message, sizeof(msg));
     } else {
-      snprintf(msg, sizeof(msg), "ALERTA %s: %d incidente(s)!", source ? source : "NOC", alertsCount);
+      snprintf(msg, sizeof(msg), "ALERTA %s: %d incidente(s) ativos na rede!", source ? source : "NOC", alertsCount);
     }
-    triggerSay(msg, PET_MOOD_ANGRY, 45);
+    triggerSay(msg, PET_MOOD_ANGRY, 45, source ? source : "ZABBIX");
   } else {
     triggerAction(PET_ACT_CELEBRATE, 10);
-    if (message && message[0]) triggerSay(message, PET_MOOD_EXCITED, 20);
+    if (message && message[0]) triggerSay(message, PET_MOOD_EXCITED, 25, source ? source : "ZABBIX");
   }
+  _hudDirty    = true;
+  _footerDirty = true;
+}
+
+void PetMode::pushHermesEvent(const char* eventType, const char* message, const char* moodStr, int alertCount) {
+  _hermesEventsCount++;
+  if (alertCount >= 0) _zbxProblems = alertCount;
+
+  uint8_t m = PET_MOOD_CYBER;
+  if (moodStr && moodStr[0]) {
+    m = petMoodFromStr(moodStr);
+  } else if (eventType) {
+    String ev(eventType);
+    if (ev.equalsIgnoreCase("wazuh_alert") || ev.equalsIgnoreCase("alert")) m = PET_MOOD_ANGRY;
+    else if (ev.equalsIgnoreCase("job_found") || ev.equalsIgnoreCase("vaga")) m = PET_MOOD_EXCITED;
+    else if (ev.equalsIgnoreCase("zabbix_ok") || ev.equalsIgnoreCase("happy")) m = PET_MOOD_HAPPY;
+  }
+
+  const char* msg = (message && message[0]) ? message : "Hermes Bot sincronizado com sucesso!";
+  strlcpy(_lastAiReply, msg, sizeof(_lastAiReply));
+  triggerSay(msg, m, 40, "HERMES BOT");
   _hudDirty    = true;
   _footerDirty = true;
 }
@@ -261,6 +309,200 @@ bool PetMode::anySystemDown(const Settings& s) const {
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Autonomous Neural Brain (NVIDIA NIM / Hermes Bot / OpenRouter OAuth / OpenAI / Gemini / Groq)
+// ---------------------------------------------------------------------------
+bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, const char* sourceTag) {
+  if (!netConnected()) return false;
+  if (!s.pet.aiKey[0] && s.pet.aiProvider != 1) return false;
+
+  // Build live context string (time, weather, NOC status)
+  struct tm t;
+  char timeStr[12] = "agora";
+  if (clockNow(t)) {
+    snprintf(timeStr, sizeof(timeStr), "%02d:%02d", t.tm_hour, t.tm_min);
+  }
+
+  int upCount = 0, downCount = 0;
+  for (uint8_t i = 0; i < MAX_WATCH_TARGETS; i++) {
+    if (s.pet.targets[i].enabled && _targetStatus[i].checked) {
+      if (_targetStatus[i].up) upCount++;
+      else downCount++;
+    }
+  }
+
+  char promptBuf[360];
+  if (customPrompt && customPrompt[0]) {
+    snprintf(promptBuf, sizeof(promptBuf),
+             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), parceira do Alex e do Hermes Bot. Hora:%s Clima:%.1fC HostsUP:%d Down:%d. Alex disse: \"%s\". Responda em Portugues sem acentos, max 60 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry|love\",\"say\":\"frase\"}",
+             timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, customPrompt);
+  } else {
+    snprintf(promptBuf, sizeof(promptBuf),
+             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), guardiana de rede integrada ao Hermes Bot e Zabbix. Hora:%s Clima:%.1fC HostsUP:%d Down:%d ZbxAlerts:%d. Gere um comentario espontaneo carismatico em Portugues sem acentos, max 60 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry\",\"say\":\"frase\"}",
+             timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, _zbxProblems > 0 ? _zbxProblems : 0);
+  }
+
+  // Prepare JSON body
+  JsonDocument reqDoc;
+  uint8_t prov = s.pet.aiProvider;
+
+  // If provider 1 (Hermes Gateway HTTP) is selected, try calling Hermes Gateway first; if unreachable, fall back to NVIDIA NIM (0)
+  if (prov == 1 && s.pet.hermesUrl[0]) {
+    WiFiClient client;
+    HTTPClient http;
+    http.setTimeout(3000);
+    String url = String(s.pet.hermesUrl);
+    if (!url.endsWith("/api/chat")) url += "/api/chat";
+    if (http.begin(client, url)) {
+      http.addHeader("Content-Type", "application/json");
+      reqDoc["message"] = promptBuf;
+      String body;
+      serializeJson(reqDoc, body);
+      int code = http.POST(body);
+      if (code == 200) {
+        String resp = http.getString();
+        http.end();
+        JsonDocument resDoc;
+        if (!deserializeJson(resDoc, resp)) {
+          const char* say = resDoc["say"] | (resDoc["reply"] | "");
+          const char* md  = resDoc["mood"] | "cyber";
+          if (say && say[0]) {
+            strlcpy(_lastAiReply, say, sizeof(_lastAiReply));
+            _aiThoughtsCount++;
+            triggerSay(say, petMoodFromStr(md), 35, "HERMES AI");
+            return true;
+          }
+        }
+      }
+      http.end();
+    }
+    // Fallback transparently to NVIDIA NIM (Hermes Wazuh Engine)
+    prov = 0;
+  }
+
+  const char* url = "https://integrate.api.nvidia.com/v1/chat/completions";
+  const char* defModel = "nvidia/nemotron-3.5-super-vl-120b-a12b";
+  if (prov == 2) {
+    url = "https://openrouter.ai/api/v1/chat/completions";
+    defModel = "openai/gpt-4o-mini";
+  } else if (prov == 3) {
+    url = "https://api.openai.com/v1/chat/completions";
+    defModel = "gpt-4o-mini";
+  } else if (prov == 5) {
+    url = "https://api.groq.com/openai/v1/chat/completions";
+    defModel = "llama-3.3-70b-versatile";
+  }
+
+  const char* modelToUse = (s.pet.aiModel[0]) ? s.pet.aiModel : defModel;
+
+#if defined(SMALLTV_ESP8266)
+  std::unique_ptr<BearSSL::WiFiClientSecure> sec(new BearSSL::WiFiClientSecure());
+  sec->setInsecure();
+  sec->setBufferSizes(1024, 512);
+#else
+  std::unique_ptr<WiFiClientSecure> sec(new WiFiClientSecure());
+  sec->setInsecure();
+#endif
+
+  HTTPClient https;
+  https.setTimeout(7500);
+
+  if (prov == 4) {
+    // Google Gemini REST API
+    String gemUrl = String("https://generativelanguage.googleapis.com/v1beta/models/") +
+                    (s.pet.aiModel[0] ? s.pet.aiModel : "gemini-2.0-flash") +
+                    ":generateContent?key=" + s.pet.aiKey;
+    if (!https.begin(*sec, gemUrl)) return false;
+    https.addHeader("Content-Type", "application/json");
+    JsonArray contents = reqDoc["contents"].to<JsonArray>();
+    JsonObject c0 = contents.add<JsonObject>();
+    JsonArray parts = c0["parts"].to<JsonArray>();
+    parts.add<JsonObject>()["text"] = promptBuf;
+  } else {
+    // OpenAI-compatible Chat Completions (NVIDIA NIM, OpenRouter, OpenAI, Groq)
+    if (!https.begin(*sec, url)) return false;
+    https.addHeader("Content-Type", "application/json");
+    https.addHeader("Authorization", String("Bearer ") + s.pet.aiKey);
+    reqDoc["model"] = modelToUse;
+    reqDoc["max_tokens"] = 90;
+    reqDoc["temperature"] = 0.75;
+    if (prov == 0) {
+      // Disable chain-of-thought reasoning tokens on NVIDIA Nemotron so reply is immediate and compact!
+      reqDoc["chat_template_kwargs"]["enable_thinking"] = false;
+    }
+    JsonArray msgs = reqDoc["messages"].to<JsonArray>();
+    JsonObject m0 = msgs.add<JsonObject>();
+    m0["role"] = "user";
+    m0["content"] = promptBuf;
+  }
+
+  String reqBody;
+  serializeJson(reqDoc, reqBody);
+  reqDoc.clear();
+
+  int httpCode = https.POST(reqBody);
+  if (httpCode != 200) {
+    https.end();
+    return false;
+  }
+
+  String payload = https.getString();
+  https.end();
+
+  JsonDocument respDoc;
+  if (deserializeJson(respDoc, payload)) return false;
+
+  const char* rawContent = nullptr;
+  if (prov == 4) {
+    rawContent = respDoc["candidates"][0]["content"]["parts"][0]["text"];
+  } else {
+    rawContent = respDoc["choices"][0]["message"]["content"];
+  }
+  if (!rawContent || !rawContent[0]) return false;
+
+  // Extract inner JSON {"mood":"...","say":"..."} if present
+  String contentStr(rawContent);
+  contentStr.trim();
+  int jStart = contentStr.indexOf('{');
+  int jEnd   = contentStr.lastIndexOf('}');
+  String sayText = contentStr;
+  uint8_t chosenMood = PET_MOOD_CYBER;
+
+  if (jStart >= 0 && jEnd > jStart) {
+    String sub = contentStr.substring(jStart, jEnd + 1);
+    JsonDocument inner;
+    if (!deserializeJson(inner, sub)) {
+      if (inner["say"].is<const char*>())  sayText = inner["say"].as<const char*>();
+      if (inner["mood"].is<const char*>()) chosenMood = petMoodFromStr(inner["mood"].as<const char*>());
+    }
+  }
+
+  sanitizeAscii(sayText.c_str(), _lastAiReply, sizeof(_lastAiReply));
+  _aiThoughtsCount++;
+  triggerSay(_lastAiReply, chosenMood, 35, sourceTag ? sourceTag : "IA NEURAL");
+  return true;
+}
+
+void PetMode::updateNeuralBrain(const Settings& s) {
+  if (!s.pet.aiEnabled || !netConnected()) return;
+  uint32_t now = millis();
+
+  // First autonomous thought 18 seconds after boot once Wi-Fi & weather are ready
+  if (_pendingAutoAi && now > 18000) {
+    _pendingAutoAi = false;
+    _lastAiMs = now;
+    triggerNeuralThought(s, nullptr, "IA NEURAL");
+    return;
+  }
+
+  if (s.pet.aiIntervalMin == 0) return;
+  uint32_t intervalMs = (uint32_t)s.pet.aiIntervalMin * 60000UL;
+  if ((now - _lastAiMs) >= intervalMs) {
+    _lastAiMs = now;
+    triggerNeuralThought(s, nullptr, "IA NEURAL");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +551,6 @@ void PetMode::updateSystems(const Settings& s) {
   if (!netConnected()) return;
   uint32_t now = millis();
 
-  // 1. Round-robin check of one WatchTarget every (sysPollSec / 4) seconds
   uint32_t stepMs = (uint32_t)max((uint16_t)10, s.pet.sysPollSec) * 250UL;
   if (_lastSysCheckMs == 0 ? (now > 6000) : ((now - _lastSysCheckMs) >= stepMs)) {
     _lastSysCheckMs = now | 1;
@@ -324,7 +565,7 @@ void PetMode::updateSystems(const Settings& s) {
       bool wasUp      = _targetStatus[idx].up;
 
       WiFiClient tcp;
-      tcp.setTimeout(450); // Fast LAN/WAN probe so animation stays smooth
+      tcp.setTimeout(450);
       uint32_t t0 = millis();
       bool ok = tcp.connect(wt.host, wt.port ? wt.port : 80);
       uint16_t lat = (uint16_t)(millis() - t0);
@@ -335,16 +576,14 @@ void PetMode::updateSystems(const Settings& s) {
       _targetStatus[idx].latencyMs = ok ? lat : 0;
 
       if (wasChecked && wasUp && !ok) {
-        // Host just went DOWN!
-        char alertMsg[48];
-        snprintf(alertMsg, sizeof(alertMsg), "ALERTA: %s OFFLINE!", wt.name[0] ? wt.name : wt.host);
-        triggerSay(alertMsg, PET_MOOD_ANGRY, 40);
+        char alertMsg[64];
+        snprintf(alertMsg, sizeof(alertMsg), "ALERTA CRITICO: %s ficou OFFLINE!", wt.name[0] ? wt.name : wt.host);
+        triggerSay(alertMsg, PET_MOOD_ANGRY, 40, "WATCHDOG");
       } else if (wasChecked && !wasUp && ok) {
-        // Host recovered!
-        char recMsg[48];
-        snprintf(recMsg, sizeof(recMsg), "ONLINE: %s voltou! (%ums)", wt.name[0] ? wt.name : wt.host, (unsigned)lat);
+        char recMsg[64];
+        snprintf(recMsg, sizeof(recMsg), "RECUPERADO: %s voltou UP (%ums)!", wt.name[0] ? wt.name : wt.host, (unsigned)lat);
         triggerAction(PET_ACT_CELEBRATE, 8);
-        triggerSay(recMsg, PET_MOOD_EXCITED, 20);
+        triggerSay(recMsg, PET_MOOD_EXCITED, 25, "WATCHDOG");
       }
       _hudDirty    = true;
       _footerDirty = true;
@@ -352,7 +591,6 @@ void PetMode::updateSystems(const Settings& s) {
     }
   }
 
-  // 2. Optional Zabbix JSON-RPC Problem Counter
   uint32_t zbxIntervalMs = (uint32_t)max((uint16_t)15, s.pet.sysPollSec) * 1000UL;
   if (s.pet.zbxEnabled && s.pet.zbxUrl[0] && s.pet.zbxToken[0] &&
       (_lastZbxCheckMs == 0 ? (now > 9000) : ((now - _lastZbxCheckMs) >= zbxIntervalMs))) {
@@ -376,12 +614,12 @@ void PetMode::updateSystems(const Settings& s) {
           int cnt  = doc["result"].is<const char*>() ? atoi(doc["result"].as<const char*>()) : (doc["result"] | 0);
           _zbxProblems = cnt;
           if (cnt > 0 && cnt != prev) {
-            char msg[48];
-            snprintf(msg, sizeof(msg), "Zabbix NOC: %d incidente(s) ativos!", cnt);
-            triggerSay(msg, PET_MOOD_ANGRY, 35);
+            char msg[64];
+            snprintf(msg, sizeof(msg), "Zabbix NOC: %d incidente(s) ativos agora!", cnt);
+            triggerSay(msg, PET_MOOD_ANGRY, 35, "ZABBIX NOC");
           } else if (cnt == 0 && prev > 0) {
             triggerAction(PET_ACT_CELEBRATE, 8);
-            triggerSay("Zabbix 100% Limpo! Zero incidentes!", PET_MOOD_EXCITED, 20);
+            triggerSay("Zabbix 100% Limpo! Zero incidentes na rede!", PET_MOOD_EXCITED, 25, "ZABBIX NOC");
           }
           _hudDirty    = true;
           _footerDirty = true;
@@ -393,12 +631,11 @@ void PetMode::updateSystems(const Settings& s) {
 }
 
 // ---------------------------------------------------------------------------
-// Autonomous AI Brain, Tamagotchi Needs & Pomodoro
+// Autonomous Mood Brain & Pomodoro
 // ---------------------------------------------------------------------------
 void PetMode::updateBrain(const Settings& s) {
   uint32_t now = millis();
 
-  // View mode switch detection
   if (_lastViewMode != s.pet.viewMode) {
     _lastViewMode = s.pet.viewMode;
     _fullRepaint  = true;
@@ -406,19 +643,17 @@ void PetMode::updateBrain(const Settings& s) {
     _footerDirty  = true;
   }
 
-  // Expire active action
   if (_activeAction != PET_ACT_NONE && _actionUntil != 0 && (int32_t)(now - _actionUntil) >= 0) {
     _activeAction = PET_ACT_NONE;
     _hudDirty     = true;
     _footerDirty  = true;
   }
 
-  // Pomodoro timer check
   if (_pomoActive) {
     if ((int32_t)(now - _pomoEndMs) >= 0) {
       _pomoActive = false;
       triggerAction(PET_ACT_CELEBRATE, 12);
-      triggerSay("Pomodoro concluido! Hora do cafe!", PET_MOOD_EXCITED, 30);
+      triggerSay("Pomodoro concluido! Hora de esticar e tomar cafe!", PET_MOOD_EXCITED, 30, "FOCO");
       _hudDirty    = true;
       _footerDirty = true;
     } else {
@@ -430,38 +665,20 @@ void PetMode::updateBrain(const Settings& s) {
     }
   }
 
-  // Gradual Tamagotchi stat decay every 4 minutes
-  if ((now - _lastDecayMs) >= 240000UL) {
-    _lastDecayMs = now;
-    if (_activeMood != PET_MOOD_SLEEP) {
-      if (_energy > 15)    _energy--;
-      if (_coffee > 10)    _coffee--;
-      if (_happiness > 20) _happiness--;
-    } else {
-      // Sleeping slowly restores energy!
-      if (_energy < 100) _energy = (uint8_t)min(100, (int)_energy + 3);
-    }
-    if (s.pet.viewMode == 0) _footerDirty = true;
-  }
-
-  // Expire speech bubble
   if (_speechActive && (int32_t)(now - _speechUntil) >= 0) {
     _speechActive = false;
     _footerDirty  = true;
   }
 
-  // Expire forced mood
   if (_forcedMood != PET_MOOD_AUTO && _forcedUntil != 0 && (int32_t)(now - _forcedUntil) >= 0) {
     _forcedMood = PET_MOOD_AUTO;
     _hudDirty   = true;
   }
 
-  // Expire forced gaze
   if (_gazeForced && (int32_t)(now - _gazeUntil) >= 0) {
     _gazeForced = false;
   }
 
-  // Determine active mood
   uint8_t prevMood = _activeMood;
   if (_activeAction == PET_ACT_PETTING) {
     _activeMood = PET_MOOD_LOVE;
@@ -472,7 +689,6 @@ void PetMode::updateBrain(const Settings& s) {
   } else if (_forcedMood != PET_MOOD_AUTO) {
     _activeMood = _forcedMood;
   } else if (anySystemDown(s)) {
-    // Automatically look alert/angry if a watched system is down!
     _activeMood = PET_MOOD_ANGRY;
   } else {
     bool shouldSleep = false;
@@ -489,20 +705,17 @@ void PetMode::updateBrain(const Settings& s) {
 
     if (shouldSleep) {
       _activeMood = PET_MOOD_SLEEP;
-    } else if (_coffee < 25 || _energy < 25) {
-      _activeMood = PET_MOOD_TIRED;
     } else if ((int32_t)(now - _nextBrainMs) >= 0) {
       uint32_t baseHold = (s.pet.activity == 0) ? 9000 : (s.pet.activity == 2) ? 3800 : 6000;
       _nextBrainMs = now + baseHold + random(0, 4000);
 
       uint8_t roll = random(0, 100);
-      if (roll < 38)      _activeMood = PET_MOOD_NORMAL;
+      if (roll < 36)      _activeMood = PET_MOOD_NORMAL;
       else if (roll < 56) _activeMood = PET_MOOD_HAPPY;
-      else if (roll < 68) _activeMood = PET_MOOD_CURIOUS;
-      else if (roll < 77) _activeMood = PET_MOOD_COOL;
-      else if (roll < 85) _activeMood = PET_MOOD_EXCITED;
-      else if (roll < 92) _activeMood = PET_MOOD_CYBER;
-      else if (roll < 96) _activeMood = PET_MOOD_SURPRISED;
+      else if (roll < 70) _activeMood = PET_MOOD_CURIOUS;
+      else if (roll < 80) _activeMood = PET_MOOD_COOL;
+      else if (roll < 88) _activeMood = PET_MOOD_EXCITED;
+      else if (roll < 95) _activeMood = PET_MOOD_CYBER;
       else                _activeMood = PET_MOOD_LOVE;
     }
   }
@@ -512,14 +725,12 @@ void PetMode::updateBrain(const Settings& s) {
     _footerDirty = true;
   }
 
-  // Rotate idle charismatic phrases in footer when no custom speech is active
   if (!_speechActive && (int32_t)(now - _nextPhraseMs) >= 0) {
-    _nextPhraseMs = now + 11000;
-    _phraseIdx    = (_phraseIdx + 1) % 7;
+    _nextPhraseMs = now + 10000;
+    _phraseIdx    = (_phraseIdx + 1) % 6;
     _footerDirty  = true;
   }
 
-  // Check if clock minute/second changed
   struct tm t;
   if (clockNow(t)) {
     if (t.tm_min != _lastClockMin) {
@@ -545,7 +756,7 @@ void PetMode::updatePhysics(const Settings& s) {
       _tgtY = 4;
       _nextSaccadeMs = now + 2000;
     } else if (_activeMood == PET_MOOD_CYBER) {
-      _tgtX = (_tgtX <= 0) ? 20.0f : -20.0f;
+      _tgtX = (_tgtX <= 0) ? 14.0f : -14.0f;
       _tgtY = 0;
       _nextSaccadeMs = now + 1100;
     } else {
@@ -553,17 +764,16 @@ void PetMode::updatePhysics(const Settings& s) {
       uint32_t maxWait = (s.pet.activity == 2) ? 1900 : (s.pet.activity == 0) ? 5000 : 3200;
       _nextSaccadeMs = now + random(minWait, maxWait);
 
-      if (random(0, 100) < 35) {
+      if (random(0, 100) < 38) {
         _tgtX = 0;
         _tgtY = 0;
       } else {
-        _tgtX = (float)random(-22, 23);
-        _tgtY = (float)random(-10, 11);
+        _tgtX = (float)random(-16, 17);
+        _tgtY = (float)random(-8, 9);
       }
     }
   }
 
-  // Elastic spring-damper physics (gives lively Cozmo/Emo bounce!)
   const float stiffness = 0.24f;
   const float damping   = 0.62f;
   _velX = (_velX + (_tgtX - _curX) * stiffness) * damping;
@@ -571,7 +781,6 @@ void PetMode::updatePhysics(const Settings& s) {
   _curX += _velX;
   _curY += _velY;
 
-  // Natural blinking state machine
   if (_activeMood == PET_MOOD_SLEEP) {
     _openL = 0.08f;
     _openR = 0.08f;
@@ -620,14 +829,14 @@ void PetMode::updatePhysics(const Settings& s) {
     }
   } else {
     if (_activeMood == PET_MOOD_TIRED) {
-      _openL = 0.46f;
-      _openR = 0.46f;
+      _openL = 0.48f;
+      _openR = 0.48f;
     } else if (_activeMood == PET_MOOD_CURIOUS) {
-      _openL = 0.72f;
-      _openR = 1.12f;
+      _openL = 0.85f;
+      _openR = 1.08f;
     } else if (_activeMood == PET_MOOD_SURPRISED || _activeMood == PET_MOOD_EXCITED) {
-      _openL = 1.15f;
-      _openR = 1.15f;
+      _openL = 1.12f;
+      _openR = 1.12f;
     } else {
       _openL = 1.0f;
       _openR = 1.0f;
@@ -645,15 +854,14 @@ void PetMode::drawHud(const Settings& s) {
     return;
   }
 
-  uint16_t hudBg   = gfxTint(0x0862);
+  uint16_t hudBg   = gfxTint(0x0842);
   uint16_t rawEye  = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
   uint16_t accent  = gfxTint(rawEye);
-  uint16_t lineCol = gfxTint(scaleColor565(rawEye, 40));
+  uint16_t lineCol = gfxTint(scaleColor565(rawEye, 45));
 
   g->fillRect(0, 0, 240, 22, hudBg);
   g->drawFastHLine(0, 22, 240, lineCol);
 
-  // Left indicator LED + Name (or Pomodoro Timer if active)
   bool alert = anySystemDown(s);
   uint16_t dotCol = alert ? gfxTint(0xF800) : accent;
   g->fillCircle(10, 11, 3, dotCol);
@@ -669,10 +877,9 @@ void PetMode::drawHud(const Settings& s) {
   } else {
     g->setTextColor(accent, hudBg);
     g->setCursor(18, 7);
-    g->print(s.pet.name[0] ? s.pet.name : "DHEXTERBOT");
+    g->print(s.pet.name[0] ? s.pet.name : "NOC-GIRL");
   }
 
-  // Center NOC Status Pill + Weather Temp
   int16_t curX = 96;
   g->setCursor(curX, 7);
   if (alert) {
@@ -690,7 +897,6 @@ void PetMode::drawHud(const Settings& s) {
     g->print(wbuf);
   }
 
-  // Right: Clock HH:MM
   struct tm t;
   char cbuf[10];
   if (clockNow(t)) {
@@ -703,20 +909,8 @@ void PetMode::drawHud(const Settings& s) {
   g->print(cbuf);
 }
 
-// ---------------------------------------------------------------------------
-// Procedural Shapes for Scanline Renderer (Zero Heap, Ultra-Fast)
-// ---------------------------------------------------------------------------
-static inline bool inRoundRect(int dx, int dy, int hw, int hh, int r) {
-  int ax = abs(dx), ay = abs(dy);
-  if (ax > hw || ay > hh) return false;
-  int ix = hw - r, iy = hh - r;
-  if (ax <= ix || ay <= iy) return true;
-  int cx = ax - ix, cy = ay - iy;
-  return (cx * cx + cy * cy) <= (r * r);
-}
-
 static inline bool inHeart(int dx, int dy, int hw, int hh) {
-  if (hw < 6 || hh < 6) return false;
+  if (hw < 4 || hh < 4) return false;
   int x = (dx * 32) / hw;
   int y = (dy * 32) / hh;
   if (abs(x) > 34 || abs(y) > 34) return false;
@@ -732,521 +926,640 @@ static inline bool inHeart(int dx, int dy, int hw, int hh) {
 static inline bool inStar(int dx, int dy, int r) {
   int ax = abs(dx), ay = abs(dy);
   if (ax > r || ay > r) return false;
-  // 4-point sparkle star + core
-  return (ax * 3 + ay <= r * 2) || (ay * 3 + ax <= r * 2) || (ax * ax + ay * ay <= (r * r) / 5);
+  return (ax * 3 + ay <= r * 2) || (ay * 3 + ax <= r * 2) || (ax * ax + ay * ay <= (r * r) / 4);
 }
 
 // ---------------------------------------------------------------------------
-// Flicker-Free Scanline Face Renderer (Eyes + Accessories + Blush + Mouth + Props)
+// MODEL 3: NOC CYBER GIRL — CLOSE-UP ANIME (SUPER EXPRESSIVA)
+// Flicker-Free Scanline Renderer (Full 240px width, 30 FPS)
 // ---------------------------------------------------------------------------
 void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
   auto* g = gfxDev();
-  const int16_t areaX = 12;
-  const int16_t areaW = 216;
+  const int16_t areaW = 240;
   const bool compact  = (areaH < 120);
 
-  uint16_t rawMain  = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
-  uint16_t colMain  = gfxTint(rawMain);
-  uint16_t colScan  = gfxTint(scaleColor565(rawMain, 74));
-  uint16_t colDim   = gfxTint(scaleColor565(rawMain, 30));
-  uint16_t colBg    = gfxTint(0x0000);
-  uint16_t colFrame = gfxTint(0x0841);
-  uint16_t colSpec  = gfxTint(0xFFFF);
-  uint16_t colBlush = gfxTint(0xF993); // Coral pink cheeks
-  uint16_t colGold  = gfxTint(0xFFE0);
-  uint16_t colMug   = gfxTint(0xFD20); // Coffee mug amber/orange
+  uint16_t rawNeon    = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
+  uint16_t colNeon    = gfxTint(rawNeon);
+  uint16_t colNeonDim = gfxTint(scaleColor565(rawNeon, 45));
 
-  float breath = sinf((float)_animTick * 0.09f) * 2.2f;
+  // Signature NOC Cyber Girl Palette (RGB565)
+  uint16_t colHair     = gfxTint(0x0842); // Jet-black / midnight navy hair (#080d1a)
+  uint16_t colSkin     = gfxTint(0xE77F); // Cool blue-tinted porcelain skin (#e4effa)
+  uint16_t colSkinShad = gfxTint(0x74DF); // Comic-noir contour shadow (#7c9bc0)
+  uint16_t colNeck     = gfxTint(0xC6DF); // Shaded neck porcelain (#c5d8ee)
+  uint16_t colWhite    = gfxTint(0xFFFF); // Pure white shine / catchlights / headband
+  uint16_t colHeadband = gfxTint(0xDF1D); // White-silver headband arch
+  uint16_t colSclera   = gfxTint(0xF7FF); // Crisp white-blue sclera
+  uint16_t colIrisTop  = gfxTint(0x08A5); // Deep navy upper iris (#09152b)
+  uint16_t colIrisMid  = gfxTint(0x1A7B); // Royal sapphire mid iris (#1d4ed8)
+  uint16_t colIrisBot  = gfxTint(0x3DFF); // Luminous cyan lower iris (#38bdf8)
+  uint16_t colLash     = gfxTint(0x0022); // Deep obsidian eyeliner & pupil
+  uint16_t colBlush    = gfxTint(0xF993); // Rosy pink anime blush
+  uint16_t colLipUp    = gfxTint(0x29EB); // Defined upper lip
+  uint16_t colLipBot   = gfxTint(0x8D7B); // Glossy lower lip
+  uint16_t colRedAlert = gfxTint(0xF8A4); // Crimson red alert LED
+  uint16_t colCyanLed  = gfxTint(0x07FF); // Switch port cyan LED
+  uint16_t colGreenLed = gfxTint(0x07EC); // Switch port green LED
+  uint16_t colRackBg   = gfxTint(0x0884); // Server rack frame
+  uint16_t colSwitchBg = gfxTint(0x1107); // 1U switch faceplate
+
+  bool alert = anySystemDown(s);
+
+  // Subtle breathing & head movement following gaze
+  float breath = sinf((float)_animTick * 0.09f) * 2.0f;
   int gx = (int)roundf(_curX);
   int gy = (int)roundf(_curY + breath);
 
-  int baseEyeY = compact ? 42 : 56;
-  int lx = 62  + gx;
-  int ly = baseEyeY + gy;
-  int rx = 154 + gx;
-  int ry = baseEyeY + gy;
+  // Head center
+  int hx = 120 + (gx / 4);
+  int hy = (compact ? 48 : 80) + (gy / 3);
+  int scalePct = compact ? 72 : 100;
 
-  int baseHW = compact ? 25 : 28;
-  int baseHH = compact ? 27 : 34;
+  // Eye centers & dimensions
+  int eyeSep = (27 * scalePct) / 100;
+  int lx = hx - eyeSep;
+  int rx = hx + eyeSep;
+  int ey = hy + (4 * scalePct) / 100;
 
-  int lhw = baseHW, rhw = baseHW;
-  int lhh = max(2, (int)roundf(baseHH * _openL));
-  int rhh = max(2, (int)roundf(baseHH * _openR));
+  int eyeHW = (16 * scalePct) / 100;
+  int baseEyeHH = (18 * scalePct) / 100;
+  int lhh = max(1, (int)roundf(baseEyeHH * _openL));
+  int rhh = max(1, (int)roundf(baseEyeHH * _openR));
 
-  if (_activeMood == PET_MOOD_CURIOUS) {
-    lhw = baseHW - 3;
-    rhw = baseHW + 4;
-  } else if (_activeMood == PET_MOOD_LOVE) {
-    int pulse = (int)(sinf((float)_animTick * 0.25f) * 3.0f);
-    lhw = baseHW + 2 + pulse; rhw = lhw;
-    lhh = baseHW + pulse;     rhh = lhh;
-  }
+  // Iris gaze offset inside the eye
+  int igx = constrain(gx / 3, -5, 5);
+  int igy = constrain((int)roundf(_curY) / 3, -4, 4);
+  int irisHW = (_activeMood == PET_MOOD_ANGRY || _activeMood == PET_MOOD_SURPRISED)
+               ? ((10 * scalePct) / 100) : ((12 * scalePct) / 100);
+  int irisHH = (_activeMood == PET_MOOD_ANGRY || _activeMood == PET_MOOD_SURPRISED)
+               ? ((12 * scalePct) / 100) : ((15 * scalePct) / 100);
 
-  int radL = min(13, min(lhw, lhh));
-  int radR = min(13, min(rhw, rhh));
-
-  int scanX = 108 + (int)(sinf((float)_animTick * 0.18f) * 78.0f);
-
-  // Mouth center & openness
-  int mouthX = 108 + (gx / 2);
-  int mouthY = compact ? (areaH - 16) : 114;
+  // Mouth position & lip-sync openness
+  int mouthX = hx;
+  int mouthY = hy + (32 * scalePct) / 100;
   bool talking = _speechActive || (_activeAction == PET_ACT_COFFEE);
-  int talkH = talking ? (2 + (int)(fabsf(sinf((float)_animTick * 0.45f)) * 7.0f)) : 0;
+  int talkH = talking ? (2 + (int)(fabsf(sinf((float)_animTick * 0.55f)) * 6.0f)) : 0;
 
-  // Effective accessory (Cool mood forces sunglasses; Pomodoro forces NOC headset if none set)
+  // Headphone earcup centers
+  int cupOffset = (62 * scalePct) / 100;
+  int lCupX = hx - cupOffset;
+  int rCupX = hx + cupOffset;
+  int cupY  = hy - (2 * scalePct) / 100;
+  int cupRX = (14 * scalePct) / 100;
+  int cupRY = (24 * scalePct) / 100;
+
+  bool pulseBright = ((_animTick / 4) & 1) == 0;
+  uint16_t colRingActive = alert ? (pulseBright ? colRedAlert : colNeonDim) : colNeon;
+
   uint8_t acc = s.pet.accessory;
-  if (_activeMood == PET_MOOD_COOL) acc = 1;
-  else if (_pomoActive && acc == 0) acc = 2;
-
-  bool showBlush = s.pet.showBlush &&
-                   (_activeMood == PET_MOOD_HAPPY || _activeMood == PET_MOOD_LOVE ||
-                    _activeMood == PET_MOOD_EXCITED || _activeAction == PET_ACT_PETTING);
-
-  bool raining = s.pet.weatherFx && _weatherValid && (_weatherCode >= 51);
+  if (_activeMood == PET_MOOD_COOL) acc = 1; // Sunglasses
 
   uint16_t rowBuf[areaW];
 
   for (int y = 0; y < areaH; y++) {
-    uint16_t bgLine = (y == 0 || y == areaH - 1) ? colFrame : colBg;
+    // -----------------------------------------------------------------------
+    // 1. SERVER ROOM DATACENTER BACKGROUND + BLINKING SWITCH RACKS
+    // -----------------------------------------------------------------------
+    uint16_t bgCol = (y < areaH / 2) ? gfxTint(0x0042) : gfxTint(0x0863);
     for (int x = 0; x < areaW; x++) {
-      rowBuf[x] = bgLine;
-    }
-    rowBuf[0] = colFrame;
-    rowBuf[areaW - 1] = colFrame;
-
-    uint16_t eyeCol = (s.pet.scanlines && ((y & 1) == 1)) ? colScan : colMain;
-
-    // 1. Background FX: Matrix Rain (ACT_HACKER) or Weather Raindrops
-    if (_activeAction == PET_ACT_HACKER) {
-      int colIdx = y / 4;
-      for (int c = 8; c < areaW - 8; c += 18) {
-        int dropY = ((_animTick * 4 + c * 7) % areaH);
-        if (abs(y - dropY) <= 5 && ((c + y) & 1)) {
-          rowBuf[c] = (y == dropY) ? colSpec : colDim;
-        }
-      }
-    } else if (raining) {
-      for (int c = 6; c < areaW - 6; c += 34) {
-        if (c > 36 && c < 180) continue; // keep rain on edges
-        int dropY = ((_animTick * 5 + c * 11) % areaH);
-        if (y >= dropY && y <= dropY + 4) {
-          rowBuf[c] = gfxTint(0x3D1F);
-        }
-      }
+      rowBuf[x] = bgCol;
     }
 
-    // 2. Top Accessory: Robot Antenna (acc == 3) or Golden Crown (acc == 4)
-    if (acc == 3 && y >= 2 && y <= 20) {
-      int ax = 108 + (gx / 3);
-      if (y <= 8) {
-        // Glowing antenna orb
-        int dyOrb = y - 5;
-        for (int x = ax - 5; x <= ax + 5; x++) {
-          int dxOrb = x - ax;
-          if (dxOrb * dxOrb + dyOrb * dyOrb <= 20) {
-            rowBuf[x] = ((_animTick & 4) || (dxOrb * dxOrb + dyOrb * dyOrb <= 6)) ? colSpec : colMain;
+    // Left (x = 3..37) & Right (x = 202..236) 19" Server Racks
+    for (int side = 0; side < 2; side++) {
+      int rx0 = (side == 0) ? 3 : 202;
+      int rx1 = rx0 + 34;
+      if (y >= 4 && y < areaH - 4) {
+        for (int x = rx0; x <= rx1; x++) {
+          if (x == rx0 || x == rx1) {
+            rowBuf[x] = colNeonDim;
+          } else {
+            rowBuf[x] = colRackBg;
+          }
+        }
+        int uMod = (y - 6) % 26;
+        int uIdx = (y - 6) / 26;
+        if (uMod >= 2 && uMod <= 20) {
+          for (int x = rx0 + 2; x <= rx1 - 2; x++) {
+            rowBuf[x] = colSwitchBg;
+          }
+          // Blinking Switch Port LEDs (top of each 1U switch)
+          if (uMod >= 5 && uMod <= 7) {
+            for (int p = 0; p < 4; p++) {
+              int px = rx0 + 5 + p * 7;
+              bool ledOn = (((_animTick / 3) + uIdx * 3 + p * 2 + side) % 3) != 0;
+              uint16_t pCol = alert ? (ledOn ? colRedAlert : colRackBg)
+                                    : (ledOn ? ((p & 1) ? colCyanLed : colGreenLed) : colNeonDim);
+              rowBuf[px]     = pCol;
+              rowBuf[px + 1] = pCol;
+              rowBuf[px + 2] = pCol;
+            }
+          } else if (uMod >= 11 && uMod <= 16) {
+            // RJ45 port cutouts
+            for (int p = 0; p < 4; p++) {
+              int px = rx0 + 5 + p * 7;
+              rowBuf[px] = 0x0000; rowBuf[px + 1] = 0x0000; rowBuf[px + 2] = 0x0000;
+            }
+          }
+        }
+      }
+    }
+
+    int dy = ((y - hy) * 100) / scalePct; // Normalized vertical coordinate relative to head center
+
+    // -----------------------------------------------------------------------
+    // 2. JET-BLACK BOB HAIR BACK + UPTURNED FLIPPED TIPS & BLUE NEON AURA
+    // -----------------------------------------------------------------------
+    if (dy >= -68 && dy <= 66) {
+      int hairHW = 0;
+      if (dy < -20) {
+        // Upper dome of hair
+        int d = dy + 20;
+        int r2 = 48 * 48 - d * d;
+        hairHW = (r2 > 0) ? (22 + (int)sqrtf((float)r2)) : 0;
+      } else if (dy <= 32) {
+        // Sleek bob sides widening gently downward
+        hairHW = 70 + ((dy + 20) * 10) / 52;
+      } else if (dy <= 56) {
+        // Signature upturned flipped-out bob curls on left & right!
+        int curlProgress = dy - 32; // 0..24
+        hairHW = 80 + (12 - abs(curlProgress - 10));
+      } else {
+        // Lower tapered hair bottom
+        hairHW = 72 - ((dy - 56) * 28) / 10;
+      }
+
+      if (hairHW > 0) {
+        int realHW = (hairHW * scalePct) / 100;
+        int x0 = max(0, hx - realHW - 2);
+        int x1 = min(areaW - 1, hx + realHW + 2);
+        for (int x = x0; x <= x1; x++) {
+          int adx = abs(x - hx);
+          // Upturned curl notch cutout on outer tips (gives the exact flipped curl silhouette!)
+          int normAdx = (adx * 100) / scalePct;
+          if (dy >= 24 && dy <= 40 && normAdx >= 72 && normAdx <= 78 && dy < 32 + (normAdx - 72)) {
+            continue;
+          }
+          if (adx >= realHW) {
+            rowBuf[x] = colNeon; // Glowing blue neon rim aura!
+          } else {
+            rowBuf[x] = colHair;
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. NECK, BLACK CHOKER WITH NEON GEM & WHITE TEE COLLAR
+    // -----------------------------------------------------------------------
+    if (dy >= 40 && dy <= 76) {
+      int neckHW = (14 * scalePct) / 100;
+      if (dy <= 58) {
+        for (int x = hx - neckHW; x <= hx + neckHW; x++) {
+          if (x >= 0 && x < areaW) {
+            if (dy >= 49 && dy <= 54) {
+              // Black Choker with glowing center neon gem!
+              if (abs(x - hx) <= 3 && dy >= 50 && dy <= 53) rowBuf[x] = colNeon;
+              else rowBuf[x] = colLash;
+            } else {
+              rowBuf[x] = colNeck;
+            }
           }
         }
       } else {
-        rowBuf[ax - 1] = colDim;
-        rowBuf[ax]     = colMain;
-        rowBuf[ax + 1] = colDim;
-      }
-    } else if (acc == 4 && y >= 4 && y <= 18) {
-      // Pixel Golden Crown
-      int cx = 108 + (gx / 3);
-      int cy = y - 4; // 0..14
-      for (int x = cx - 22; x <= cx + 22; x++) {
-        int dx = abs(x - cx);
-        bool inCrown = (cy >= 9) ||
-                       (dx <= 6 && cy >= dx) ||
-                       (dx >= 10 && dx <= 22 && cy >= abs(dx - 16));
-        if (inCrown) {
-          if (cy == 11 && (dx == 0 || dx == 14)) rowBuf[x] = gfxTint(0xF800); // Ruby gems
-          else rowBuf[x] = colGold;
+        // White T-Shirt Shoulders & Collar with Neon Rim
+        int shHW = ((16 + (dy - 58) * 3) * scalePct) / 100;
+        for (int x = max(0, hx - shHW); x <= min(areaW - 1, hx + shHW); x++) {
+          int adx = abs(x - hx);
+          if (adx >= shHW - 1) rowBuf[x] = colNeon;
+          else rowBuf[x] = colHeadband;
         }
       }
     }
 
-    // 3. NOC Headset Headband & Earpads (acc == 2)
-    if (acc == 2) {
-      int hx = 108 + (gx / 2);
-      if (y >= 8 && y <= 14) {
-        for (int x = hx - 82; x <= hx + 82; x++) {
-          if (x >= 2 && x < areaW - 2) {
-            int arcY = 8 + (abs(x - hx) * abs(x - hx)) / 950;
-            if (abs(y - arcY) <= 1) rowBuf[x] = colMain;
-          }
-        }
+    // -----------------------------------------------------------------------
+    // 4. PORCELAIN ANIME FACE CONTOUR + CYBER BLUSH
+    // -----------------------------------------------------------------------
+    if (dy >= -44 && dy <= 47) {
+      int faceHW = 0;
+      if (dy < 8) {
+        faceHW = 54;
+      } else {
+        // Smooth anime V-jaw tapering to chin at dy = 47
+        int t = dy - 8; // 0..39
+        faceHW = 54 - (t * t * 40) / (39 * 39) - (t * 14) / 39;
       }
-      if (y >= baseEyeY - 16 && y <= baseEyeY + 18) {
-        // Left & right earpads
-        for (int x = 10; x <= 18; x++) rowBuf[x] = colMain;
-        for (int x = areaW - 19; x <= areaW - 11; x++) rowBuf[x] = colMain;
-      }
-      // Boom mic reaching from left earpad toward mouth
-      if (y >= baseEyeY + 16 && y <= mouthY + 2) {
-        int mx = 16 + (y - (baseEyeY + 16)) * 2;
-        if (mx >= 12 && mx < mouthX - 18) {
-          rowBuf[mx]     = colDim;
-          rowBuf[mx + 1] = colMain;
-          if (y >= mouthY && y <= mouthY + 2) {
-            rowBuf[mx + 2] = gfxTint(0x07E0); // Green active mic LED
-            rowBuf[mx + 3] = gfxTint(0x07E0);
-          }
-        }
-      }
-    }
-
-    // 4. Eyes (12 Moods)
-    if (_activeMood == PET_MOOD_CYBER) {
-      int dy = y - ly;
-      if (abs(dy) <= 13) {
-        for (int x = 22; x < 194; x++) {
-          int dx = abs(x - 108);
-          if (dx <= 84 && abs(dy) <= 11) {
-            int distFromBeam = abs(x - scanX);
-            if (distFromBeam < 12)      rowBuf[x] = colSpec;
-            else if (distFromBeam < 32) rowBuf[x] = eyeCol;
-            else if ((x % 4) == 0)      rowBuf[x] = colDim;
-          }
-        }
-      }
-    } else {
-      for (int side = 0; side < 2; side++) {
-        int cx  = (side == 0) ? lx  : rx;
-        int cy  = (side == 0) ? ly  : ry;
-        int hw  = (side == 0) ? lhw : rhw;
-        int hh  = (side == 0) ? lhh : rhh;
-        int rad = (side == 0) ? radL : radR;
-
-        int dy = y - cy;
-        if (abs(dy) > hh + 8) continue;
-
-        int x0 = max(2, cx - hw - 2);
-        int x1 = min(areaW - 3, cx + hw + 2);
-
-        for (int x = x0; x <= x1; x++) {
-          int dx = x - cx;
-          bool lit  = false;
-          bool spec = false;
-
-          if (_activeMood == PET_MOOD_LOVE) {
-            lit = inHeart(dx, dy, hw, hh);
-            if (lit && dx >= -hw / 2 && dx <= -hw / 5 && dy >= -hh / 2 && dy <= -hh / 5) spec = true;
-          } else if (_activeMood == PET_MOOD_EXCITED) {
-            if (inRoundRect(dx, dy, hw, hh, rad)) {
-              lit = true;
-              if (inStar(dx, dy, hw - 6)) spec = true;
-            }
-          } else if (_activeMood == PET_MOOD_HAPPY) {
-            if (inRoundRect(dx, dy, hw, hh, rad)) {
-              int cutY = cy + 9 + (dx * dx) / 26;
-              if (y < cutY) lit = true;
-            }
-          } else if (_activeMood == PET_MOOD_SLEEP) {
-            int arcY = cy + 6 - (dx * dx) / 40;
-            if (abs(dx) <= hw - 4 && abs(y - arcY) <= 2) lit = true;
-          } else {
-            if (inRoundRect(dx, dy, hw, hh, rad)) {
-              lit = true;
-              if (_activeMood == PET_MOOD_ANGRY) {
-                int innerDx = (side == 0) ? dx : -dx;
-                int slopeY  = cy - hh + 12 + ((innerDx + hw) * 18) / (2 * hw);
-                if (y < slopeY) lit = false;
-              } else if (_activeMood == PET_MOOD_TIRED) {
-                if (y < cy - 3) lit = false;
-              }
-              if (lit && hh > 12) {
-                int sx = dx + hw / 3 - gx / 4;
-                int sy = dy + hh / 3 - gy / 4;
-                if (sx * sx + sy * sy <= 22) spec = true;
-                int sx2 = dx - hw / 3;
-                int sy2 = dy - hh / 3;
-                if (sx2 * sx2 + sy2 * sy2 <= 6) spec = true;
-              }
-            }
-          }
-
-          if (lit) {
-            rowBuf[x] = spec ? colSpec : eyeCol;
-          }
-        }
-      }
-    }
-
-    // 5. Cool Sunglasses Overlay (acc == 1 or PET_MOOD_COOL)
-    if (acc == 1) {
-      int sy = ly;
-      int dy = y - sy;
-      if (dy >= -18 && dy <= 16) {
-        // Bridge + side temples
-        if (dy >= -16 && dy <= -12) {
-          for (int x = max(4, lx - 32); x <= min(areaW - 5, rx + 32); x++) {
-            rowBuf[x] = colSpec;
-          }
-        }
-        // Left & right dark lenses with neon border and diagonal white reflection
-        for (int side = 0; side < 2; side++) {
-          int cx = (side == 0) ? lx : rx;
-          int lensHW = 30;
-          int lensHH = 16;
-          for (int x = max(4, cx - lensHW); x <= min(areaW - 5, cx + lensHW); x++) {
-            int dx = x - cx;
-            if (abs(dx) <= lensHW && dy >= -lensHH && dy <= lensHH - (abs(dx) / 5)) {
-              bool border = (abs(dx) >= lensHW - 2) || (dy <= -lensHH + 2) || (dy >= lensHH - (abs(dx) / 5) - 2);
-              int Glint = (dx + dy);
-              if (border) {
-                rowBuf[x] = colMain;
-              } else if (Glint >= -10 && Glint <= -5 || Glint >= 2 && Glint <= 4) {
-                rowBuf[x] = colSpec; // Deal With It diagonal lens shine!
-              } else {
-                rowBuf[x] = gfxTint(0x0862); // Dark tinted lens
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // 6. Rosy Blushing Cheeks (below outer eye edges)
-    if (showBlush) {
-      int blushY = ly + baseHH + 5;
-      int dyB = y - blushY;
-      if (abs(dyB) <= 5) {
-        for (int side = 0; side < 2; side++) {
-          int bx = (side == 0) ? (lx - 22) : (rx + 22);
-          for (int x = max(4, bx - 12); x <= min(areaW - 5, bx + 12); x++) {
-            int dxB = x - bx;
-            if ((dxB * dxB) / 28 + (dyB * dyB) / 5 <= 5) {
-              // Cute anime diagonal blush slashes inside pink oval
-              if (((x + y) % 4) == 0) rowBuf[x] = colSpec;
-              else rowBuf[x] = colBlush;
-            }
-          }
-        }
-      }
-    }
-
-    // 7. Animated Expressive Mouth
-    if (s.pet.showMouth && _activeMood != PET_MOOD_CYBER) {
-      int dyM = y - mouthY;
-      if (abs(dyM) <= 12) {
-        if (talking && talkH >= 3) {
-          // Open talking mouth D-shape / oval
-          for (int x = mouthX - 12; x <= mouthX + 12; x++) {
-            int dxM = x - mouthX;
-            if (dyM >= -2 && dyM <= talkH + 2 && (dxM * dxM) / 18 + (dyM * dyM) / max(2, talkH) <= 8) {
-              bool rim = (dyM == -2) || (abs(dxM) >= 10) || (dyM >= talkH);
-              rowBuf[x] = rim ? colMain : (dyM >= talkH - 2 ? colBlush : colBg);
-            }
-          }
-        } else if (_activeMood == PET_MOOD_HAPPY || _activeMood == PET_MOOD_LOVE || _activeMood == PET_MOOD_EXCITED) {
-          // Cute cat-mouth 'w' or wide smile arc
-          for (int x = mouthX - 15; x <= mouthX + 15; x++) {
-            int dxM = x - mouthX;
-            int curveY = -2 + (dxM * dxM) / 28;
-            if (abs(dyM - curveY) <= 1) rowBuf[x] = colMain;
-          }
-        } else if (_activeMood == PET_MOOD_ANGRY) {
-          // Frown / jagged mouth
-          for (int x = mouthX - 13; x <= mouthX + 13; x++) {
-            int dxM = x - mouthX;
-            int curveY = 4 - (dxM * dxM) / 28;
-            if (abs(dyM - curveY) <= 1) rowBuf[x] = colMain;
-          }
-        } else if (_activeMood == PET_MOOD_SURPRISED) {
-          // Small 'O' mouth
-          for (int x = mouthX - 7; x <= mouthX + 7; x++) {
-            int dxM = x - mouthX;
-            int d2 = dxM * dxM + dyM * dyM;
-            if (d2 >= 16 && d2 <= 42) rowBuf[x] = colMain;
-          }
-        } else if (_activeMood == PET_MOOD_COOL) {
-          // Confident asymmetric smirk
-          for (int x = mouthX - 10; x <= mouthX + 14; x++) {
-            int dxM = x - mouthX;
-            int smirkY = 2 - (dxM + 10) / 5;
-            if (abs(dyM - smirkY) <= 1) rowBuf[x] = colMain;
-          }
-        } else if (_activeMood != PET_MOOD_SLEEP) {
-          // Gentle neutral smile
-          for (int x = mouthX - 10; x <= mouthX + 10; x++) {
-            int dxM = x - mouthX;
-            int curveY = (dxM * dxM) / 36;
-            if (abs(dyM - curveY) <= 1) rowBuf[x] = colMain;
-          }
-        }
-      }
-    }
-
-    // 8. Interactive Action Props (Coffee Mug, Electric Bolts, Floating Hearts/Stars, Sleep zZz)
-    if (_activeAction == PET_ACT_COFFEE && !compact) {
-      // Steaming Coffee Mug at bottom-right of face (x = 158..190, y = 96..134)
-      int mugX = 172, mugY = 118;
-      int dyC = y - mugY;
-      if (dyC >= -14 && dyC <= 14) {
-        for (int x = mugX - 12; x <= mugX + 16; x++) {
-          int dxC = x - mugX;
-          if (dxC >= -11 && dxC <= 11 && abs(dyC) <= 12) {
-            bool rim = (abs(dxC) >= 9 || dyC <= -10 || dyC >= 10);
-            rowBuf[x] = rim ? colSpec : colMug;
-          } else if (dxC > 11 && dxC <= 15 && abs(dyC) <= 7) {
-            if (dxC >= 14 || abs(dyC) >= 5) rowBuf[x] = colSpec; // Mug handle
-          }
-        }
-      } else if (dyC >= -28 && dyC < -14) {
-        // Rising steam wisps (~ ~)
-        int wisp = (int)(sinf((float)(y + _animTick) * 0.35f) * 3.0f);
-        rowBuf[mugX - 5 + wisp] = colSpec;
-        rowBuf[mugX + 4 - wisp] = colSpec;
-      }
-    } else if (_activeAction == PET_ACT_CHARGE) {
-      // Electric lightning bolts on left and right sides
-      if ((_animTick & 1) == 0 && y >= 24 && y <= areaH - 20) {
-        int zig = ((y / 8) & 1) ? 4 : -4;
-        int lxBolt = 18 + zig + (y % 8);
-        int rxBolt = areaW - 18 - zig - (y % 8);
-        rowBuf[lxBolt] = colGold; rowBuf[lxBolt + 1] = colSpec;
-        rowBuf[rxBolt] = colGold; rowBuf[rxBolt - 1] = colSpec;
-      }
-    } else if (_activeAction == PET_ACT_PETTING || _activeAction == PET_ACT_CELEBRATE) {
-      // Floating hearts or celebration stars rising on left & right
-      for (int p = 0; p < 2; p++) {
-        int px = (p == 0) ? 24 : (areaW - 24);
-        int py = areaH - 15 - (((_animTick * 2) + p * 45) % (areaH - 25));
-        if (abs(y - py) <= 6) {
-          for (int x = px - 6; x <= px + 6; x++) {
-            if (_activeAction == PET_ACT_PETTING) {
-              if (inHeart(x - px, y - py, 6, 6)) rowBuf[x] = colBlush;
+      if (faceHW > 0) {
+        int realFHW = (faceHW * scalePct) / 100;
+        for (int x = hx - realFHW; x <= hx + realFHW; x++) {
+          if (x >= 0 && x < areaW) {
+            int adx = abs(x - hx);
+            if (adx >= realFHW - 1 || (dy >= 45 && adx <= 8)) {
+              rowBuf[x] = colSkinShad;
             } else {
-              if (inStar(x - px, y - py, 6)) rowBuf[x] = (p == 0) ? colGold : colMain;
+              rowBuf[x] = colSkin;
             }
           }
         }
       }
-    } else if (_activeMood == PET_MOOD_SLEEP) {
-      int zPhase = (_animTick * 2) % 60;
-      int zy1 = 44 - (zPhase / 2);
-      int zx1 = 166 + (zPhase / 3);
-      if (y >= zy1 && y < zy1 + 10 && zx1 + 8 < areaW) {
-        int ryZ = y - zy1;
-        for (int rxZ = 0; rxZ < 8; rxZ++) {
-          if (ryZ == 0 || ryZ == 9 || (rxZ + ryZ == 8)) rowBuf[zx1 + rxZ] = eyeCol;
+
+      // Rosy/Cyber Anime Blush on cheeks (dy = 15..23)
+      if (s.pet.showBlush && dy >= 15 && dy <= 23) {
+        int bdy = dy - 19;
+        for (int side = 0; side < 2; side++) {
+          int bx = (side == 0) ? (hx - (33 * scalePct) / 100) : (hx + (33 * scalePct) / 100);
+          int bhw = (10 * scalePct) / 100;
+          for (int x = bx - bhw; x <= bx + bhw; x++) {
+            int bdx = x - bx;
+            if ((bdx * bdx) / 16 + (bdy * bdy) <= 5) {
+              if (((x + y) % 4) == 0) rowBuf[x] = colBlush;
+              else if (_activeMood == PET_MOOD_LOVE || _activeMood == PET_MOOD_HAPPY) rowBuf[x] = colBlush;
+              else rowBuf[x] = colSkinShad;
+            }
+          }
+        }
+      }
+
+      // Subtle comic anime nose shadow (dy = 16..20)
+      if (dy >= 16 && dy <= 20) {
+        if (dy == 20) {
+          rowBuf[hx - 1] = colSkinShad;
+          rowBuf[hx]     = colSkinShad;
+        } else {
+          rowBuf[hx - 1] = colSkinShad;
         }
       }
     }
 
-    g->draw16bitRGBBitmap(areaX, areaY + y, rowBuf, areaW, 1);
+    // -----------------------------------------------------------------------
+    // 5. SUPER-EXPRESSIVE MULTI-LAYERED SAPPHIRE ANIME EYES
+    // -----------------------------------------------------------------------
+    int edy = y - ey;
+    if (abs(edy) <= baseEyeHH + 10) {
+      for (int side = 0; side < 2; side++) {
+        int cx = (side == 0) ? lx : rx;
+        int hh = (side == 0) ? lhh : rhh;
+        int dir = (side == 0) ? -1 : 1; // -1 left eye, +1 right eye
+
+        // A. Sleepy / Blinking closed eye arch
+        if (hh <= 3 || _activeMood == PET_MOOD_SLEEP) {
+          for (int x = cx - eyeHW; x <= cx + eyeHW; x++) {
+            int edx = x - cx;
+            int curveY = 3 - (edx * edx) / 48;
+            if (abs(edy - curveY) <= 1) rowBuf[x] = colLash;
+          }
+          continue;
+        }
+
+        // B. Happy closed anime eye arch (^ ^) with lush winged lashes!
+        if (_activeMood == PET_MOOD_HAPPY) {
+          for (int x = cx - eyeHW - 3; x <= cx + eyeHW + 3; x++) {
+            int edx = x - cx;
+            int archY = -4 + (edx * edx) / 28;
+            if (abs(edy - archY) <= 2 && abs(edx) <= eyeHW + 2) {
+              rowBuf[x] = colLash;
+            }
+          }
+          continue;
+        }
+
+        // C. Open Multi-Layered Sapphire Anime Eye
+        if (abs(edy) <= hh + 2) {
+          for (int x = cx - eyeHW - 4; x <= cx + eyeHW + 4; x++) {
+            int edx = x - cx;
+
+            // Winged upper eyeliner flick on outer edge
+            if (edx * dir >= eyeHW - 2 && edx * dir <= eyeHW + 4) {
+              int wingY = -hh + 4 - ((edx * dir - (eyeHW - 2)) * 3) / 2;
+              if (abs(edy - wingY) <= 1) {
+                rowBuf[x] = colLash;
+                continue;
+              }
+            }
+
+            // Rounded anime eye boundary: (edx/eyeHW)^2 + (edy/hh)^2 <= 1
+            int normDist = (edx * edx * 100) / max(1, eyeHW * eyeHW) +
+                           (edy * edy * 100) / max(1, hh * hh);
+            if (normDist <= 100) {
+              // Thick upper anime eyelash arch
+              int topArchY = -hh + (edx * edx) / 36;
+              if (edy <= topArchY + 3) {
+                rowBuf[x] = colLash;
+                continue;
+              }
+              // Delicate lower lash rim
+              if (normDist >= 90 && edy > hh / 2) {
+                rowBuf[x] = colSkinShad;
+                continue;
+              }
+
+              // Sclera base
+              uint16_t pix = colSclera;
+
+              // Iris check (centered at igx, igy)
+              int idx = edx - igx;
+              int idy = edy - igy;
+              int irisDist = (idx * idx * 100) / max(1, irisHW * irisHW) +
+                             (idy * idy * 100) / max(1, irisHH * irisHH);
+
+              if (irisDist <= 100) {
+                if (irisDist >= 84) {
+                  // Dark outer limbal ring of the anime iris
+                  pix = colLash;
+                } else {
+                  // 3-stop Sapphire Vertical Gradient Iris!
+                  if (idy < -irisHH / 4)      pix = colIrisTop;
+                  else if (idy < irisHH / 3)  pix = colIrisMid;
+                  else                        pix = colIrisBot;
+
+                  // Inner Pupil or Special Mood Symbol (Heart / Star / Cyber Ring)
+                  if (_activeMood == PET_MOOD_LOVE && inHeart(idx, idy, irisHW - 2, irisHH - 2)) {
+                    pix = colBlush;
+                  } else if (_activeMood == PET_MOOD_EXCITED && inStar(idx, idy, irisHW - 2)) {
+                    pix = gfxTint(0xFFE0);
+                  } else if (irisDist <= 26) {
+                    pix = colLash; // Deep obsidian pupil
+                  } else if (_activeMood == PET_MOOD_CYBER && irisDist >= 30 && irisDist <= 46) {
+                    pix = colNeon; // Glowing Persocom/Cyber data ring inside iris!
+                  }
+                }
+
+                // Dual Crystal White Catchlights (Upper-Left big + Lower-Right sparkle)
+                int c1x = idx + irisHW / 3;
+                int c1y = idy + irisHH / 3;
+                int c2x = idx - irisHW / 3;
+                int c2y = idy - irisHH / 3;
+                if (c1x * c1x + c1y * c1y <= 11) {
+                  pix = colWhite;
+                } else if (c2x * c2x + c2y * c2y <= 4) {
+                  pix = colWhite;
+                }
+              }
+
+              rowBuf[x] = pix;
+            }
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. COOL CYBER SUNGLASSES OVERLAY (acc == 1 or PET_MOOD_COOL)
+    // -----------------------------------------------------------------------
+    if (acc == 1 && abs(edy) <= 14) {
+      if (edy >= -12 && edy <= -9) {
+        for (int x = lx - eyeHW - 4; x <= rx + eyeHW + 4; x++) rowBuf[x] = colNeon;
+      }
+      for (int side = 0; side < 2; side++) {
+        int cx = (side == 0) ? lx : rx;
+        int lhw = eyeHW + 4;
+        for (int x = cx - lhw; x <= cx + lhw; x++) {
+          int dx = x - cx;
+          if (edy >= -11 && edy <= 11) {
+            bool border = (abs(dx) >= lhw - 1 || edy <= -10 || edy >= 10);
+            int glint = dx + edy;
+            if (border) rowBuf[x] = colNeon;
+            else if ((glint >= -8 && glint <= -4) || (glint >= 2 && glint <= 4)) rowBuf[x] = colWhite;
+            else rowBuf[x] = colHair;
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. EXPRESSIVE ANIME MOUTH WITH LIP-SYNC
+    // -----------------------------------------------------------------------
+    int mdy = y - mouthY;
+    if (s.pet.showMouth && abs(mdy) <= 10) {
+      int mhw = (9 * scalePct) / 100;
+      if (talking && talkH >= 3) {
+        for (int x = mouthX - mhw; x <= mouthX + mhw; x++) {
+          int mdx = x - mouthX;
+          if (mdy >= -2 && mdy <= talkH + 1 && (mdx * mdx) / 12 + (mdy * mdy) / max(2, talkH) <= 6) {
+            if (mdy == -2 || mdy == -1) rowBuf[x] = colWhite; // Upper teeth
+            else if (mdy >= talkH - 1)  rowBuf[x] = colBlush; // Tongue
+            else                        rowBuf[x] = colLash;
+          }
+        }
+      } else if (_activeMood == PET_MOOD_HAPPY || _activeMood == PET_MOOD_EXCITED || _activeMood == PET_MOOD_LOVE) {
+        // Open anime happy smile
+        for (int x = mouthX - mhw; x <= mouthX + mhw; x++) {
+          int mdx = x - mouthX;
+          int botY = 6 - (mdx * mdx) / 14;
+          if (mdy >= 0 && mdy <= botY) {
+            if (mdy == 0 || mdy == botY) rowBuf[x] = colLash;
+            else rowBuf[x] = colBlush;
+          }
+        }
+      } else if (_activeMood == PET_MOOD_ANGRY || _activeMood == PET_MOOD_SURPRISED) {
+        // Alert oval mouth
+        for (int x = mouthX - 6; x <= mouthX + 6; x++) {
+          int mdx = x - mouthX;
+          int d2 = mdx * mdx + mdy * mdy;
+          if (d2 <= 25) rowBuf[x] = (d2 >= 15) ? colLash : colRedAlert;
+        }
+      } else {
+        // Signature Comic-Noir Defined Lips (from the reference photo!)
+        for (int x = mouthX - 7; x <= mouthX + 7; x++) {
+          int mdx = x - mouthX;
+          if (mdy >= -1 && mdy <= 1 && abs(mdx) <= 7) {
+            rowBuf[x] = colLipUp;
+          } else if (mdy >= 2 && mdy <= 4 && abs(mdx) <= 6 - (mdy - 2) * 2) {
+            rowBuf[x] = colLipBot;
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. FULL STRAIGHT DARK BANGS + COMIC-NOIR WHITE GLOSS STREAKS
+    // -----------------------------------------------------------------------
+    if (dy >= -62 && dy <= -12) {
+      int bangHW = (60 * scalePct) / 100;
+      for (int x = max(0, hx - bangHW); x <= min(areaW - 1, hx + bangHW); x++) {
+        int bdx = ((x - hx) * 100) / scalePct;
+        // Curved top of bangs
+        int topLim = -60 + (bdx * bdx) / 120;
+        // Scalloped fringe bottom with natural part dips over forehead
+        int botLim = -14;
+        if (abs(bdx - 18) <= 5)      botLim = -22 + abs(bdx - 18);
+        else if (abs(bdx + 22) <= 5) botLim = -21 + abs(bdx + 22);
+
+        if (dy >= topLim && dy <= botLim) {
+          // Comic-noir white hair shine streaks across the bangs (dy = -40..-26)
+          bool isWhiteStreak = false;
+          if (dy >= -40 && dy <= -26) {
+            int sMod = (bdx + 60) % 18;
+            int sWidth = (dy + 40) / 5;
+            if (sMod >= 7 - sWidth && sMod <= 7 + sWidth) isWhiteStreak = true;
+          }
+          rowBuf[x] = isWhiteStreak ? colWhite : colHair;
+        }
+      }
+    }
+
+    // Expressive Eyebrows (visible cleanly at the edge of the fringe, dy = -16..-11)
+    if (dy >= -16 && dy <= -11) {
+      for (int side = 0; side < 2; side++) {
+        int cx = (side == 0) ? lx : rx;
+        int dir = (side == 0) ? -1 : 1;
+        for (int x = cx - eyeHW + 2; x <= cx + eyeHW - 2; x++) {
+          int edx = x - cx;
+          int browY = -14;
+          if (_activeMood == PET_MOOD_ANGRY) {
+            browY = -12 - (edx * dir) / 4; // Furrowed inward
+          } else if (_activeMood == PET_MOOD_CURIOUS && side == 1) {
+            browY = -15 + (edx * edx) / 60; // Raised right eyebrow
+          } else {
+            browY = -14 + (edx * edx) / 55;
+          }
+          if (abs(dy - browY) <= 1) rowBuf[x] = colLash;
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. WHITE HEADBAND ARCH + OVER-EAR HEADPHONES WITH PULSING NEON RINGS
+    // -----------------------------------------------------------------------
+    // Upper White Headband Arch (dy = -68..-46)
+    if (dy >= -68 && dy <= -42) {
+      int hbHW = (62 * scalePct) / 100;
+      for (int x = max(0, hx - hbHW); x <= min(areaW - 1, hx + hbHW); x++) {
+        int bdx = ((x - hx) * 100) / scalePct;
+        int archY = -65 + (bdx * bdx) / 165;
+        if (abs(dy - archY) <= 3) {
+          rowBuf[x] = colHeadband;
+        }
+      }
+    }
+
+    // Left & Right Over-Ear Headphone Cups with Glowing Neon Rings!
+    int cdy = y - cupY;
+    if (abs(cdy) <= cupRY + 2) {
+      for (int side = 0; side < 2; side++) {
+        int cx = (side == 0) ? lCupX : rCupX;
+        int dir = (side == 0) ? -1 : 1;
+        for (int x = max(0, cx - cupRX - 2); x <= min(areaW - 1, cx + cupRX + 2); x++) {
+          int cdx = x - cx;
+          int ell = (cdx * cdx * 100) / max(1, cupRX * cupRX) +
+                    (cdy * cdy * 100) / max(1, cupRY * cupRY);
+          if (ell <= 100) {
+            // Glowing Neon Ring at ell = 58..86
+            if (ell >= 56 && ell <= 86) {
+              rowBuf[x] = colRingActive;
+            } else if (ell > 86) {
+              rowBuf[x] = colNeonDim;
+            } else {
+              // Inner glossy crescent highlight on earcup
+              if (cdy >= 4 && cdy <= 10 && cdx * dir >= 2 && cdx * dir <= 6) {
+                rowBuf[x] = colNeon;
+              } else {
+                rowBuf[x] = colHair;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Headphone cable glowing downwards from right earcup
+    if (y > cupY + cupRY && y < areaH) {
+      int cableX = rCupX + ((y - (cupY + cupRY)) / 5);
+      if (cableX >= 0 && cableX + 1 < areaW) {
+        rowBuf[cableX]     = colRingActive;
+        rowBuf[cableX + 1] = colNeonDim;
+      }
+    }
+
+    g->draw16bitRGBBitmap(0, areaY + y, rowBuf, areaW, 1);
   }
 }
 
 // ---------------------------------------------------------------------------
-// View 0 Bottom Panel: Speech Bubble + Tamagotchi Stat Bars (y = 167..239)
+// View 0 Bottom Panel: Cyberpunk Speech Bubble (No Tamagotchi Bars!) (y = 186..239)
 // ---------------------------------------------------------------------------
 void PetMode::drawBottomPanel(const Settings& s) {
   auto* g = gfxDev();
-  g->fillRect(0, 166, 240, 74, 0x0000);
+  g->fillRect(0, 186, 240, 54, 0x0000);
   if (!s.pet.showFooter) return;
 
   uint16_t rawMain   = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
-  uint16_t borderCol = gfxTint(scaleColor565(rawMain, 65));
+  uint16_t borderCol = gfxTint(rawMain);
   uint16_t bubbleBg  = gfxTint(0x0862);
   uint16_t textCol   = _speechActive ? gfxTint(0xFFE0) : gfxTint(0xFFFF);
 
-  // Speech bubble card (y = 170..213)
-  g->fillRoundRect(10, 170, 220, 42, 8, bubbleBg);
-  g->drawRoundRect(10, 170, 220, 42, 8, borderCol);
-  g->fillTriangle(114, 170, 126, 170, 120, 165, borderCol);
+  // Full-width Cyberpunk Speech Card (y = 189..236, height = 47px)
+  g->fillRoundRect(6, 189, 228, 47, 8, bubbleBg);
+  g->drawRoundRect(6, 189, 228, 47, 8, borderCol);
+
+  // Header badge inside speech bubble: [IA NEURAL] / [HERMES BOT] / [ZABBIX NOC]
+  const char* srcBadge = _speechActive ? _speechSource : "NOC CYBER GIRL";
+  g->setTextSize(1);
+  g->setTextColor(borderCol, bubbleBg);
+  g->setCursor(14, 194);
+  g->print("[");
+  g->print(srcBadge);
+  g->print("]");
+
+  // Right side of header badge: AI provider tag
+  const char* provNames[] = {"NIM-120B", "HERMES", "OPENROUTER", "OPENAI", "GEMINI", "GROQ"};
+  const char* pName = provNames[s.pet.aiProvider <= 5 ? s.pet.aiProvider : 0];
+  int16_t px = 226 - (int16_t)(strlen(pName) * 6);
+  g->setTextColor(gfxTint(0x74DF), bubbleBg);
+  g->setCursor(px, 194);
+  g->print(pName);
 
   const char* msg = nullptr;
-  char autoBuf[46];
+  char autoBuf[68];
 
   if (_speechActive && _speechText[0]) {
     msg = _speechText;
+  } else if (_lastAiReply[0] && (_phraseIdx == 0 || _phraseIdx == 3)) {
+    msg = _lastAiReply;
   } else {
     switch (_phraseIdx) {
-      case 0:
-        msg = s.pet.statusText[0] ? s.pet.statusText : "DhexterBot 2.0 na escuta!";
-        break;
       case 1:
         if (anySystemDown(s)) {
-          snprintf(autoBuf, sizeof(autoBuf), "ATENCAO: Verifique o painel NOC!");
-          msg = autoBuf;
+          snprintf(autoBuf, sizeof(autoBuf), "ATENCAO: Queda detectada no painel NOC! Verifique agora.");
         } else {
-          msg = "Sistemas monitorados 100% OK!";
+          snprintf(autoBuf, sizeof(autoBuf), "Switches Aruba, Zabbix e links WAN operando 100%% UP!");
         }
+        msg = autoBuf;
         break;
       case 2:
         if (_weatherValid) {
-          snprintf(autoBuf, sizeof(autoBuf), "Clima agora: %.1f C | Nivel %u", _weatherTemp, (unsigned)level());
-          msg = autoBuf;
+          snprintf(autoBuf, sizeof(autoBuf), "Temperatura externa: %.1f C | Integrada ao Hermes Bot", _weatherTemp);
         } else {
-          msg = "Que tal um cafezinho agora?";
+          snprintf(autoBuf, sizeof(autoBuf), "Monitorando pacotes em tempo real com o Hermes Bot.");
         }
-        break;
-      case 3:
-        snprintf(autoBuf, sizeof(autoBuf), "IP: %s | Heap: %uK", netIP().c_str(), (unsigned)(ESP.getFreeHeap() / 1024));
         msg = autoBuf;
         break;
       case 4:
-        msg = (_coffee < 40) ? "Preciso de cafe! Me da um gole?" : "Energia total! Bora codar!";
-        break;
-      case 5:
-        msg = "Mande comandos em /api/pet!";
+        snprintf(autoBuf, sizeof(autoBuf), "IP: %s | RAM Livre: %u KB | Pensamentos IA: %u",
+                 netIP().c_str(), (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)_aiThoughtsCount);
+        msg = autoBuf;
         break;
       default:
-        msg = "Seu companheiro fiel de bancada!";
+        msg = s.pet.statusText[0] ? s.pet.statusText : "Pronta na bancada! Converse comigo na Web UI.";
         break;
     }
   }
 
-  g->setTextSize(1);
   g->setTextColor(textCol, bubbleBg);
   size_t len = strlen(msg);
-  if (len <= 33) {
-    int16_t tx = 120 - (int16_t)(len * 3);
-    if (tx < 16) tx = 16;
-    g->setCursor(tx, 187);
+  if (len <= 35) {
+    g->setCursor(14, 212);
     g->print(msg);
   } else {
-    char line1[34];
+    char line1[36];
     strlcpy(line1, msg, sizeof(line1));
-    g->setCursor(18, 179);
+    g->setCursor(14, 207);
     g->print(line1);
-    g->setCursor(18, 194);
-    g->print(msg + 33);
+    char line2[36];
+    strlcpy(line2, msg + 35, sizeof(line2));
+    g->setCursor(14, 220);
+    g->print(line2);
   }
-
-  // Mini Tamagotchi Status Bars (y = 218..236): ⚡ Energy | ☕ Coffee | ♥ Happy | LV.X
-  uint16_t barBg = gfxTint(0x1082);
-  // ⚡ Energy
-  g->setTextColor(gfxTint(0x073F), 0x0000);
-  g->setCursor(12, 222);
-  g->print("E:");
-  g->fillRect(24, 223, 36, 6, barBg);
-  g->fillRect(24, 223, (int16_t)(36 * _energy / 100), 6, gfxTint(0x073F));
-
-  // ☕ Coffee
-  g->setTextColor(gfxTint(0xFD60), 0x0000);
-  g->setCursor(68, 222);
-  g->print("C:");
-  g->fillRect(80, 223, 36, 6, barBg);
-  g->fillRect(80, 223, (int16_t)(36 * _coffee / 100), 6, gfxTint(0xFD60));
-
-  // ♥ Happiness
-  g->setTextColor(gfxTint(0xF993), 0x0000);
-  g->setCursor(124, 222);
-  g->print("H:");
-  g->fillRect(136, 223, 36, 6, barBg);
-  g->fillRect(136, 223, (int16_t)(36 * _happiness / 100), 6, gfxTint(0xF993));
-
-  // 🏆 Level badge
-  char lvBuf[12];
-  snprintf(lvBuf, sizeof(lvBuf), "LV.%u", (unsigned)level());
-  g->setTextColor(gfxTint(0xFFE0), 0x0000);
-  g->setCursor(184, 222);
-  g->print(lvBuf);
 }
 
 // ---------------------------------------------------------------------------
@@ -1296,7 +1609,7 @@ void PetMode::drawBigClockPanel(const Settings& s) {
   g->setCursor(max((int16_t)18, dx), 188);
   g->print(dateBuf);
 
-  const char* botMsg = _speechActive ? _speechText : (s.pet.statusText[0] ? s.pet.statusText : "DhexterBot Clock Mode");
+  const char* botMsg = _speechActive ? _speechText : (_lastAiReply[0] ? _lastAiReply : "NOC Cyber Girl Online");
   char clip[34];
   strlcpy(clip, botMsg, sizeof(clip));
   g->setTextColor(accent, cardBg);
@@ -1352,7 +1665,6 @@ void PetMode::drawNocPanel(const Settings& s) {
     g->print(rightBuf);
   }
 
-  // Bottom status / Zabbix summary line inside NOC card
   g->drawFastHLine(14, 212, 212, borderCol);
   char sumBuf[36];
   if (_speechActive && _speechText[0]) {
@@ -1362,7 +1674,7 @@ void PetMode::drawNocPanel(const Settings& s) {
     snprintf(sumBuf, sizeof(sumBuf), "Zabbix API: %d incidente(s)", _zbxProblems);
     g->setTextColor(_zbxProblems > 0 ? gfxTint(0xF800) : gfxTint(0x07E0), cardBg);
   } else {
-    snprintf(sumBuf, sizeof(sumBuf), "IP: %s | Guardiao Ativo", netIP().c_str());
+    snprintf(sumBuf, sizeof(sumBuf), "Hermes Events: %u | Neural: %u", (unsigned)_hermesEventsCount, (unsigned)_aiThoughtsCount);
     g->setTextColor(gfxTint(rawMain), cardBg);
   }
   int16_t sx = 120 - (int16_t)(strlen(sumBuf) * 3);
@@ -1388,6 +1700,7 @@ void PetMode::service(const Settings& s) {
 
   updateWeather(s);
   updateSystems(s);
+  updateNeuralBrain(s);
   updateBrain(s);
   updatePhysics(s);
 
@@ -1397,19 +1710,19 @@ void PetMode::service(const Settings& s) {
   }
 
   if (s.pet.viewMode == 1) {
-    drawFaceRegion(s, 24, 102);
+    drawFaceRegion(s, 23, 103);
     if (_footerDirty) {
       drawBigClockPanel(s);
       _footerDirty = false;
     }
   } else if (s.pet.viewMode == 2) {
-    drawFaceRegion(s, 24, 98);
+    drawFaceRegion(s, 23, 99);
     if (_footerDirty) {
       drawNocPanel(s);
       _footerDirty = false;
     }
   } else {
-    drawFaceRegion(s, 24, 140);
+    drawFaceRegion(s, 23, 163);
     if (_footerDirty) {
       drawBottomPanel(s);
       _footerDirty = false;

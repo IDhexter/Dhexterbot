@@ -1,66 +1,44 @@
-# 🤖 DhexterBot 2.0 — Companheiro Virtual de Bancada & Guardião NOC
+# 🎧 DhexterBot 2.1 — NOC Cyber Girl (Super Expressiva) + Cérebro Neural & Hermes Bot
 
-**DhexterBot 2.0** é um sistema operacional / firmware autônomo em C++ desenvolvido especificamente para o hardware **GeekMagic SmallTV** (`ESP-12F / ESP8266`, 4 MB Flash, tela IPS `1.54" 240x240 ST7789`).
+**DhexterBot 2.1** é um firmware autônomo em C++ desenvolvido sob medida para o hardware **GeekMagic SmallTV** (`ESP-12F / ESP8266`, 4 MB Flash, tela IPS `1.54" 240x240 ST7789`).
 
-Transforma a telinha em um **robô companheiro carismático** (inspirado em *Anki Cozmo*, *Living.AI Emo* e *BMO*) com física elástica a **30 FPS (zero flicker)**, necessidades estilo **Tamagotchi**, **Timer Pomodoro** e **integração direta com sistemas de monitoramento (Zabbix JSON-RPC & Watchdog TCP/IP)**.
-
----
-
-## ✨ Principais Recursos
-
-### 1. Motor Gráfico Scanline 30 FPS & Carisma Procedural
-- **Renderização Scanline sem Flicker:** desenha o rosto completo (`216x140 px`) linha a linha usando apenas `432 bytes` de stack (zero alocação de Heap), mantendo mais de **24 KB de RAM livre** no ESP8266.
-- **Física Elástica (*Spring-Damper Physics*):** pupilas e pálpebras se movem com inércia e elasticidade orgânica, com piscadas simples e duplas naturais.
-- **Rosto Completo Expressivo:**
-  - **12 Humores:** `Auto (IA)`, `Normal`, `Feliz (^_^)`, `Empolgado (★_★)`, `Apaixonado (♥_♥)`, `Cool (Óculos Escuros 😎)`, `Curioso (o_O)`, `Surpreso (O_O)`, `Cyber Scanner (KITT)`, `Bravo / Alerta (>_<)`, `Sonolento` e `Dormindo (zZz)`.
-  - **Boca Animada Sincronizada:** sorri, faz expressões e abre/fecha em tempo real enquanto o robô fala no balão de diálogo.
-  - **Bochechas Coradas (*Blush*):** bochechas rosa/coral em pixel-art quando feliz, apaixonado ou recebendo carinho.
-  - **Acessórios Customizáveis:** Óculos Escuros *Deal With It* 😎, Headset de Operador NOC com microfone 🎧, Antena Robótica luminosa 📡 e Coroa Pixel Dourada 👑.
-- **Clima Autônomo Reativo (Open-Meteo):** consulta a temperatura e condição climática local via Wi-Fi sem precisar de PC ou chave de API, desenhando gotas de chuva na tela quando chove na sua cidade.
-
-### 2. Interações Tamagotchi & Pomodoro de Bancada
-- **Atributos Vivos:** barras de **⚡ Energia**, **☕ Café**, **❤️ Felicidade** e sistema de **🏆 Nível / XP**.
-- **Animações de Ação:**
-  - `☕ Dar Café`: desenha uma xícara fumegante na tela enquanto o DhexterBot toma goles e recupera Energia/Café.
-  - `👋 Fazer Cafuné`: olhos fecham de alegria com corações flutuando e ganho de XP.
-  - `⚡ Recarregar Bateria`: raios neon elétricos nas laterais do rosto.
-  - `💻 Modo Hacker`: chuva digital estilo *Matrix* escorrendo ao fundo dos olhos.
-  - `🎉 Comemorar`: estrelas e confetes celebrando deploys ou recuperação de links.
-- **🍅 Timer Pomodoro Integrado:** contagens de foco (`25 min`, `50 min`, pausa `5 min`) no topo da tela com ativação automática do Headset NOC.
-
-### 3. Três Modos de Visualização na Tela (`viewMode`)
-1. **`0` — Rosto Completo Carismático:** Rosto grande + HUD superior + Balão de fala + Barras de vida Tamagotchi.
-2. **`1` — Relógio Digital Gigante + DhexterBot:** O robô fica na metade superior espiando o relógio digital grande (`HH:MM:SS`), data e temperatura.
-3. **`2` — Matriz Guardião NOC + DhexterBot:** O robô reage na metade superior enquanto a metade inferior exibe em tempo real o status (`UP` com latência em `ms` ou `DOWN!`) dos 4 hosts monitorados e alertas do Zabbix.
-
-### 4. Integração Nativa com Sistemas & NOC
-- **Watchdog TCP/IP Autônomo (4 Slots):** o próprio ESP8266 testa portas TCP na LAN/WAN (ex: `Internet 1.1.1.1:53`, `Zabbix 10.10.1.26:80`, Switches, Gateways). Se algum cair, o DhexterBot muda para expressão de alerta (`>_<`) e avisa qual ativo caiu; quando volta, ele comemora!
-- **Conector Direto Zabbix API (`api_jsonrpc.php`):** consulta `problem.get` diretamente pela rede Wi-Fi e reage à contagem de incidentes ativos.
-- **API REST / Webhook (`/api/pet` e `/api/notify`):** receba comandos e alertas a partir de scripts PowerShell, Zabbix Actions, Grafana ou Home Assistant.
+Transforma a SmallTV na **NOC Cyber Girl — Close-Up Anime (Super Expressiva)**: uma companheira de bancada e guardiã de rede com **Cérebro Neural Autônomo (LLM)**, **Login OAuth PKCE 1-Clique**, **Integração Bidirecional Nativa com o Hermes Agent (`hermes-agent`)** e monitoramento direto do **Zabbix NOC (`10.10.1.26`)**.
 
 ---
 
-## 🌐 Exemplos de Automação via API (`POST /api/pet`)
+## ✨ Principais Recursos da v2.1
 
-### Enviar fala e expressão:
-```bash
-curl -X POST http://<IP_DA_SMALLTV>/api/pet \
-  -H "Content-Type: application/json" \
-  -d '{"say":"Deploy concluido com sucesso!","mood":"excited","ttl":30}'
-```
+### 1. Visual "NOC Cyber Girl — Close-Up Anime (Super Expressiva)" em 240×240 (30 FPS)
+- **Zero Barras de Fome/Level:** 100% da tela dedicada ao retrato anime super expressivo na sala de servidores e ao balão de diálogo cyberpunk de 2 linhas.
+- **Personagem Fiel à Arte Original:**
+  - **Cabelo Chanel Preto com Pontas Viradas para Cima:** contorno luminoso neon azul (`aura rim light`) e reflexos brancos de quadrinhos (*comic-noir*) na franja.
+  - **Headphones Over-Ear com Arco Branco e Anel LED Neon Duplo:** o anel luminoso das conchas pulsa e muda de cor dinamicamente conforme o estado da rede (**Azul Ciano** normal, **Verde Esmeralda** tudo UP, **Roxo Neural** falando via IA/Hermes, **Rosa** carinho e **Vermelho Piscante** em queda de link!).
+  - **Olhos Anime Safira em Camadas:** esclera branco-azulada, íris com degradê de 3 tons (azul-marinho → safira real → ciano luminoso), duplo brilho cristalino (*catchlights*), delineado superior com puxadinho (*winged eyeliner*), corações (`♥`), estrelas (`★`) ou anel de dados Persocom/Cyber!
+  - **Fundo de Sala de Servidores (Datacenter NOC):** racks laterais de 19" com switches 1U e LEDs de portas piscando em tempo real.
+  - **Lip-Sync em Tempo Real:** os lábios se movem sincronizados enquanto ela fala no balão inferior.
 
-### Acionar animação Tamagotchi (`coffee`, `pet`, `charge`, `hacker`, `celebrate`):
-```bash
-curl -X POST http://<IP_DA_SMALLTV>/api/pet \
-  -H "Content-Type: application/json" \
-  -d '{"action":"coffee"}'
-```
+### 2. Cérebro Neural Autônomo + Login OAuth PKCE 1-Clique
+- **Pensamentos Espontâneos Contextualizados:** periodicamente (ou com 1 clique na Web UI), o próprio ESP8266 consulta o LLM enviando horário NTP, temperatura externa ao vivo (`Open-Meteo`) e estado dos hosts do NOC (`Zabbix` / `Watchdog`), recebendo a frase e o humor em JSON (`~45 tokens` por chamada).
+- **6 Provedores Neurais Suportados Direto no ESP8266 (`BearSSL`):**
+  - `0` — **NVIDIA NIM (`nvidia/nemotron-3.5-super-vl-120b-a12b`)**: mesmo motor do Hermes Wazuh, pré-configurado de fábrica com `enable_thinking: false` para respostas instantâneas.
+  - `1` — **Hermes Bot Gateway (`http://172.1.0.32:9119` / `172.17.0.40`)**: ponte HTTP direta com fallback automático para NVIDIA NIM.
+  - `2` — **OpenRouter (Com Botão `🔗 Conectar via OAuth 1-Clique` na Web UI)**: fluxo OAuth PKCE completo direto no navegador!
+  - `3` — **OpenAI Oficial (`gpt-4o-mini`)**
+  - `4` — **Google Gemini (`gemini-2.0-flash` / `gemini-flash-lite-latest`)**
+  - `5` — **Groq Cloud (`llama-3.3-70b-versatile`)**
 
-### Enviar Alerta de Monitoramento / Zabbix:
+### 3. Integração Bidirecional com o Hermes Bot (`/api/hermes/webhook`)
+O seu **Hermes Agent** (rodando no Proxmox LXC 100 `172.1.0.32` ou no servidor Wazuh `172.17.0.40`) pode enviar alertas e conversar com a NOC Cyber Girl na sua mesa usando o endpoint `/api/hermes/webhook` ou o script [`scripts/hermes_dhexterbot_bridge.py`](scripts/hermes_dhexterbot_bridge.py):
+
 ```bash
-curl -X POST http://<IP_DA_SMALLTV>/api/pet \
-  -H "Content-Type: application/json" \
-  -d '{"alertSource":"ZABBIX","alertMsg":"Link WAN Vivo Offline!","alertCount":1}'
+# 1. Notificar nova vaga remota encontrada pelo Hermes Job Hunter:
+python scripts/hermes_dhexterbot_bridge.py --event job_found --msg "Hermes: 2 vagas Sr Remotas salvas no Notion!"
+
+# 2. Enviar alerta de segurança do Wazuh SIEM:
+python scripts/hermes_dhexterbot_bridge.py --event wazuh_alert --msg "Wazuh SIEM: Alerta nivel 12 detectado!" --alerts 1
+
+# 3. Fazer o Hermes conversar com o Cérebro Neural da SmallTV:
+python scripts/hermes_dhexterbot_bridge.py --event ask --msg "Como estao os switches Aruba e links WAN?"
 ```
 
 ---
@@ -68,12 +46,9 @@ curl -X POST http://<IP_DA_SMALLTV>/api/pet \
 ## 🛠️ Compilação & Atualização OTA (PlatformIO)
 
 ```bash
-# 1. Regenerar o painel web compactado (webui.h) se editar src/webui.html
-python tools/gzip_webui.py
+# Compilar o binário para ESP8266 (compacta src/webui.html automaticamente)
+python -m platformio run -e smalltv
 
-# 2. Compilar o binário para ESP8266 (GeekMagic SmallTV)
-pio run -e smalltv
-
-# 3. Enviar via Wi-Fi OTA
-curl -X POST "http://<IP_DA_SMALLTV>/update" -F "firmware=@.pio/build/smalltv/firmware.bin"
+# Enviar via Wi-Fi OTA
+curl.exe -X POST "http://10.0.15.235/update" -F "firmware=@.pio/build/smalltv/firmware.bin"
 ```

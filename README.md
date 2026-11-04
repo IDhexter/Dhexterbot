@@ -9,12 +9,12 @@ Transforma a SmallTV na **NOC Cyber Girl — Close-Up Anime (Super Expressiva)**
 ## ✨ Principais Recursos da v2.1
 
 ### 1. Visual "NOC Cyber Girl — Close-Up Anime (Super Expressiva)" em 240×240 (30 FPS)
-- **Zero Barras de Fome/Level:** 100% da tela dedicada ao retrato anime super expressivo na sala de servidores e ao balão de diálogo cyberpunk de 2 linhas.
+- **Zero Barras de Fome/Level:** 100% da tela dedicada ao retrato anime super expressivo sobre fundo de estúdio escuro limpo e à **janela de diálogo grande de 3 linhas (`12x16` Bold)**.
 - **Personagem Fiel à Arte Original:**
-  - **Cabelo Chanel Preto com Pontas Viradas para Cima:** contorno luminoso neon azul (`aura rim light`) e reflexos brancos de quadrinhos (*comic-noir*) na franja.
-  - **Headphones Over-Ear com Arco Branco e Anel LED Neon Duplo:** o anel luminoso das conchas pulsa e muda de cor dinamicamente conforme o estado da rede (**Azul Ciano** normal, **Verde Esmeralda** tudo UP, **Roxo Neural** falando via IA/Hermes, **Rosa** carinho e **Vermelho Piscante** em queda de link!).
+  - **Cabelo Chanel Preto Fixo com Pontas Viradas para Cima:** cabelo preto (`0x0842`), contorno (`0x1A56`) e reflexos brancos de quadrinhos (*comic-noir*) na franja permanecem **sempre com as cores originais fixas** (nunca mudam de cor).
+  - **Apenas os Headphones Mudam de Cor:** os fones over-ear têm arco branco e anel LED neon duplo que pulsa e muda de cor dinamicamente conforme o estado/humor ou preset (**Azul Ciano** normal, **Verde Esmeralda** tudo UP, **Roxo Neural** falando via IA/Hermes, **Rosa** carinho e **Vermelho Piscante** em queda de link!).
   - **Olhos Anime Safira em Camadas:** esclera branco-azulada, íris com degradê de 3 tons (azul-marinho → safira real → ciano luminoso), duplo brilho cristalino (*catchlights*), delineado superior com puxadinho (*winged eyeliner*), corações (`♥`), estrelas (`★`) ou anel de dados Persocom/Cyber!
-  - **Fundo de Sala de Servidores (Datacenter NOC):** racks laterais de 19" com switches 1U e LEDs de portas piscando em tempo real.
+  - **Janela de Diálogo Grande (`232x77 px`, Fonte `12x16` Bold):** exibe falas espontâneas da IA, mensagens do Hermes Bot e alertas do NOC em 3 linhas grandes com quebra de palavra automática.
   - **Lip-Sync em Tempo Real:** os lábios se movem sincronizados enquanto ela fala no balão inferior.
 
 ### 2. Cérebro Neural Autônomo + Login OAuth PKCE 1-Clique
@@ -40,6 +40,18 @@ python scripts/hermes_dhexterbot_bridge.py --event wazuh_alert --msg "Wazuh SIEM
 # 3. Fazer o Hermes conversar com o Cérebro Neural da SmallTV:
 python scripts/hermes_dhexterbot_bridge.py --event ask --msg "Como estao os switches Aruba e links WAN?"
 ```
+
+---
+
+## 📡 Hotspot de Emergência & Captive Portal (`SETUP MODE` — Zero Risco de Brick)
+
+Se a SmallTV for ligada em um local onde nenhuma das redes Wi-Fi salvas (até 5 redes simultâneas) esteja disponível:
+1. Ela **nunca bricka**: após 8 segundos sem encontrar as redes salvas, entra automaticamente em **`SETUP MODE`**.
+2. A tela da SmallTV exibe em letras grandes:
+   - **Wi-Fi para conectar (`Join WiFi:`):** `DhexterBot-Setup` (rede aberta)
+   - **Endereço de configuração (`Then open:`):** `http://192.168.4.1`
+3. Ao conectar pelo celular ou notebook no Wi-Fi `DhexterBot-Setup`, o **Captive Portal** abre o painel de configuração automaticamente (ou em `http://192.168.4.1`), permitindo buscar e salvar a nova rede Wi-Fi.
+4. Enquanto estiver em `SETUP MODE`, a cada **90 segundos** ela tenta reconectar silenciosamente às redes salvas — se o roteador principal voltar após uma queda de energia, ela retorna sozinha para a **NOC Cyber Girl**.
 
 ---
 

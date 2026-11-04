@@ -190,9 +190,9 @@ void PetSettings::setDefaults() {
   targets[2].port = 80;
   targets[2].enabled = true;
 
-  strlcpy(targets[3].name, "Hermes Agent", sizeof(targets[3].name));
-  strlcpy(targets[3].host, "hermes.local", sizeof(targets[3].host));
-  targets[3].port = 8000;
+  strlcpy(targets[3].name, "Hermes Brain", sizeof(targets[3].name));
+  strlcpy(targets[3].host, "172.1.0.32", sizeof(targets[3].host));
+  targets[3].port = 9119;
   targets[3].enabled = false;
 
   zbxEnabled  = false;
@@ -200,12 +200,14 @@ void PetSettings::setDefaults() {
   zbxToken[0] = 0;
   zbxMinSev   = 3;
 
-  aiEnabled     = true;
-  aiProvider    = 0; // 0 = NVIDIA NIM, 1 = Universal Hermes Agent, 2 = OpenRouter OAuth, 3 = OpenAI, 4 = Gemini, 5 = Groq
-  strlcpy(aiKey, "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", sizeof(aiKey));
-  strlcpy(aiModel, "nvidia/nemotron-3.5-super-vl-120b-a12b", sizeof(aiModel));
-  strlcpy(hermesUrl, "http://hermes.local:8000", sizeof(hermesUrl));
-  aiIntervalMin = 10;
+  // ESP8266 = Buddy Body; Hermes = Brain (No cloud LLM keys stored in firmware!)
+  hermesEnabled     = true;
+  strlcpy(hermesUrl, "http://172.1.0.32:9119", sizeof(hermesUrl));
+  hermesToken[0]    = 0;
+  strlcpy(hermesPersona, "NOC Cyber Girl carismatica, prestativa e bem-humorada", sizeof(hermesPersona));
+  hermesIntervalMin = 10;
+  activeStartHour   = 8;
+  activeEndHour     = 23;
 }
 
 void PetSettings::toJson(JsonObject o, bool includeSecrets) const {
@@ -233,15 +235,16 @@ void PetSettings::toJson(JsonObject o, bool includeSecrets) const {
   } else {
     o["zbxTokenSet"] = (zbxToken[0] != 0);
   }
-  o["aiEnabled"]     = aiEnabled;
-  o["aiProvider"]    = aiProvider;
-  o["aiModel"]       = aiModel;
-  o["hermesUrl"]     = hermesUrl;
-  o["aiIntervalMin"] = aiIntervalMin;
+  o["hermesEnabled"]     = hermesEnabled;
+  o["hermesUrl"]         = hermesUrl;
+  o["hermesPersona"]     = hermesPersona;
+  o["hermesIntervalMin"] = hermesIntervalMin;
+  o["activeStartHour"]   = activeStartHour;
+  o["activeEndHour"]     = activeEndHour;
   if (includeSecrets) {
-    o["aiKey"] = aiKey;
+    o["hermesToken"] = hermesToken;
   } else {
-    o["aiKeySet"] = (aiKey[0] != 0);
+    o["hermesTokenSet"] = (hermesToken[0] != 0);
   }
   JsonArray arr = o["targets"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_WATCH_TARGETS; i++) {
@@ -293,24 +296,27 @@ void PetSettings::fromJson(JsonObjectConst o) {
   }
   if (o["zbxMinSev"].is<int>()) zbxMinSev = (uint8_t)constrain(o["zbxMinSev"].as<int>(), 0, 5);
 
-  if (o["aiEnabled"].is<bool>()) aiEnabled = o["aiEnabled"].as<bool>();
-  if (o["aiProvider"].is<int>()) aiProvider = (uint8_t)constrain(o["aiProvider"].as<int>(), 0, 5);
-  if (o["aiKey"].is<const char*>()) {
-    String k = o["aiKey"].as<const char*>();
-    k.trim();
-    if (k.length() > 0) strlcpy(aiKey, k.c_str(), sizeof(aiKey));
-  }
-  if (o["aiModel"].is<const char*>()) {
-    String m = o["aiModel"].as<const char*>();
-    m.trim();
-    if (m.length() > 0) strlcpy(aiModel, m.c_str(), sizeof(aiModel));
-  }
+  if (o["hermesEnabled"].is<bool>()) hermesEnabled = o["hermesEnabled"].as<bool>();
+  else if (o["aiEnabled"].is<bool>()) hermesEnabled = o["aiEnabled"].as<bool>();
   if (o["hermesUrl"].is<const char*>()) {
     String h = o["hermesUrl"].as<const char*>();
     h.trim();
     if (h.length() > 0) strlcpy(hermesUrl, h.c_str(), sizeof(hermesUrl));
   }
-  if (o["aiIntervalMin"].is<int>()) aiIntervalMin = (uint16_t)constrain(o["aiIntervalMin"].as<int>(), 0, 240);
+  if (o["hermesToken"].is<const char*>()) {
+    String ht = o["hermesToken"].as<const char*>();
+    ht.trim();
+    if (ht.length() > 0) strlcpy(hermesToken, ht.c_str(), sizeof(hermesToken));
+  }
+  if (o["hermesPersona"].is<const char*>()) {
+    String hp = o["hermesPersona"].as<const char*>();
+    hp.trim();
+    if (hp.length() > 0) strlcpy(hermesPersona, hp.c_str(), sizeof(hermesPersona));
+  }
+  if (o["hermesIntervalMin"].is<int>()) hermesIntervalMin = (uint16_t)constrain(o["hermesIntervalMin"].as<int>(), 0, 240);
+  else if (o["aiIntervalMin"].is<int>()) hermesIntervalMin = (uint16_t)constrain(o["aiIntervalMin"].as<int>(), 0, 240);
+  if (o["activeStartHour"].is<int>()) activeStartHour = (uint8_t)constrain(o["activeStartHour"].as<int>(), 0, 23);
+  if (o["activeEndHour"].is<int>())   activeEndHour   = (uint8_t)constrain(o["activeEndHour"].as<int>(), 0, 23);
 
   if (o["targets"].is<JsonArrayConst>()) {
     JsonArrayConst arr = o["targets"].as<JsonArrayConst>();

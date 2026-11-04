@@ -258,10 +258,9 @@ static void handlePetGet() {
   o["lastAiReply"]       = g_petMode.lastAiReply();
   o["aiThoughtsCount"]   = g_petMode.aiThoughtsCount();
   o["hermesEventsCount"] = g_petMode.hermesEventsCount();
-  o["aiEnabled"]         = S->pet.aiEnabled;
-  o["aiProvider"]        = S->pet.aiProvider;
-  o["aiModel"]           = S->pet.aiModel;
+  o["hermesEnabled"]     = S->pet.hermesEnabled;
   o["hermesUrl"]         = S->pet.hermesUrl;
+  o["hermesPersona"]     = S->pet.hermesPersona;
   o["viewMode"]          = S->pet.viewMode;
   o["weatherValid"]      = g_petMode.weatherValid();
   o["temp"]              = g_petMode.weatherTemp();
@@ -362,22 +361,8 @@ static void handleAiChat() {
     deserializeJson(doc, server.arg("plain"));
   }
 
-  // Save OAuth PKCE key if returned from OpenRouter OAuth flow
-  if (doc["oauthKey"].is<const char*>()) {
-    const char* k = doc["oauthKey"].as<const char*>();
-    if (k && k[0]) {
-      strlcpy(S->pet.aiKey, k, sizeof(S->pet.aiKey));
-      S->pet.aiProvider = 2; // OpenRouter OAuth
-      if (!S->pet.aiModel[0] || strstr(S->pet.aiModel, "nvidia") != nullptr) {
-        strlcpy(S->pet.aiModel, "openai/gpt-4o-mini", sizeof(S->pet.aiModel));
-      }
-      S->pet.aiEnabled = true;
-      saveSettings(*S);
-    }
-  }
-
   const char* prompt = doc["prompt"] | "";
-  const char* src    = (prompt && prompt[0]) ? "CHAT IA" : "IA NEURAL";
+  const char* src    = (prompt && prompt[0]) ? "HERMES CHAT" : "HERMES AI";
   bool ok = g_petMode.triggerNeuralThought(*S, (prompt && prompt[0]) ? prompt : nullptr, src);
 
   JsonDocument res;
@@ -389,14 +374,33 @@ static void handleAiChat() {
   sendJson(res);
 }
 
-// Universal Hermes Agent Endpoint (/api/hermes/webhook & /api/hermes)
+static bool checkHermesToken(const String& bodyToken) {
+  if (!S->pet.hermesToken[0]) return true; // No token required if not configured yet
+  String expected(S->pet.hermesToken);
+  if (bodyToken.length() > 0 && bodyToken == expected) return true;
+  if (server.hasArg("token") && server.arg("token") == expected) return true;
+  if (server.hasHeader("X-Buddy-Token") && server.header("X-Buddy-Token") == expected) return true;
+  if (server.hasHeader("Authorization")) {
+    String auth = server.header("Authorization");
+    if (auth == expected || auth == (String("Bearer ") + expected)) return true;
+  }
+  return false;
+}
+
+// Universal Hermes Buddy Endpoint (/api/hermes/webhook & /api/hermes)
 static void handleHermesWebhook() {
   // If called via GET without action parameters, return the Universal Hermes Tool Manifest & Live Status
   if (server.method() == HTTP_GET && !server.hasArg("event") && !server.hasArg("msg") && !server.hasArg("message")) {
+    if (!checkHermesToken("")) {
+      server.send(401, "application/json", "{\"ok\":false,\"error\":\"unauthorized (invalid X-Buddy-Token)\"}");
+      return;
+    }
     JsonDocument manifest;
     manifest["ok"]                = true;
     manifest["agent"]             = "DhexterBot-NOC-CyberGirl";
-    manifest["protocol"]          = "hermes-universal-v1";
+    manifest["role"]              = "buddy-body";
+    manifest["protocol"]          = "hermes-buddy-v2";
+    manifest["authRequired"]      = (S->pet.hermesToken[0] != 0);
     manifest["mood"]              = petMoodName(g_petMode.currentMood());
     manifest["speech"]            = g_petMode.currentSpeech();
     manifest["lastAiReply"]       = g_petMode.lastAiReply();
@@ -409,7 +413,10 @@ static void handleHermesWebhook() {
     JsonObject schema = manifest["schema"].to<JsonObject>();
     schema["endpoint"] = "/api/hermes/webhook";
     schema["methods"]  = "GET, POST";
-    schema["fields"]   = "event (notify|ask|alert|success|ok), message/say/text/content/output, mood (happy|excited|cyber|cool|curious|angry|love|normal|sleep), action (coffee|pet|charge|hacker|celebrate), alerts (int)";
+    schema["auth"]     = "Header X-Buddy-Token or Authorization: Bearer <token>";
+    schema["maxLines"] = 3;
+    schema["maxCharsPerLine"] = 18;
+    schema["fields"]   = "event (notify|ask|alert|success|ok), message/say/text/content/output (max 54 chars), mood (happy|excited|cyber|cool|curious|angry|love|normal|sleep), action (coffee|pet|charge|hacker|celebrate), alerts (int)";
     sendJson(manifest);
     return;
   }
@@ -419,11 +426,13 @@ static void handleHermesWebhook() {
   if (!message.length()) message = server.arg("message");
   String moodStr   = server.arg("mood");
   String actionStr = server.arg("action");
+  String bodyToken = "";
   int alertCount   = server.hasArg("alerts") ? server.arg("alerts").toInt() : -1;
 
   if (server.hasArg("plain") && server.arg("plain").length() > 0) {
     JsonDocument doc;
     if (!deserializeJson(doc, server.arg("plain"))) {
+      if (doc["token"].is<const char*>())        bodyToken = doc["token"].as<const char*>();
       if (doc["event"].is<const char*>())        eventType = doc["event"].as<const char*>();
       else if (doc["type"].is<const char*>())    eventType = doc["type"].as<const char*>();
       if (doc["message"].is<const char*>())      message   = doc["message"].as<const char*>();
@@ -436,6 +445,13 @@ static void handleHermesWebhook() {
       if (doc["action"].is<const char*>())       actionStr = doc["action"].as<const char*>();
       if (doc["alerts"].is<int>())               alertCount = doc["alerts"].as<int>();
     }
+  }
+
+  // Allow authenticated Hermes calls OR same-origin Web UI test buttons
+  bool fromSameOriginUi = server.hasHeader("Origin") && guardAllowed();
+  if (!fromSameOriginUi && !checkHermesToken(bodyToken)) {
+    server.send(401, "application/json", "{\"ok\":false,\"error\":\"unauthorized (invalid X-Buddy-Token)\"}");
+    return;
   }
 
   if (actionStr.length() > 0) {
@@ -579,10 +595,10 @@ void webPortalBegin(Settings& settings) {
   server.onNotFound(handleNotFound);
 
 #if defined(SMALLTV_FAMILY_ESP8266)
-  server.collectHeaders("Origin", "Sec-Fetch-Site");
+  server.collectHeaders("Origin", "Sec-Fetch-Site", "X-Buddy-Token", "Authorization");
 #else
-  static const char* kGuardHeaders[] = {"Origin", "Sec-Fetch-Site"};
-  server.collectHeaders(kGuardHeaders, 2);
+  static const char* kGuardHeaders[] = {"Origin", "Sec-Fetch-Site", "X-Buddy-Token", "Authorization"};
+  server.collectHeaders(kGuardHeaders, 4);
 #endif
 
   server.begin();

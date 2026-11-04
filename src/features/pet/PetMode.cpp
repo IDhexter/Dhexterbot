@@ -10,11 +10,9 @@
 #if defined(SMALLTV_ESP8266)
   #include <ESP8266HTTPClient.h>
   #include <WiFiClient.h>
-  #include <WiFiClientSecureBearSSL.h>
 #else
   #include <HTTPClient.h>
   #include <WiFiClient.h>
-  #include <WiFiClientSecure.h>
 #endif
 #include <math.h>
 
@@ -321,17 +319,62 @@ bool PetMode::anySystemDown(const Settings& s) const {
 }
 
 // ---------------------------------------------------------------------------
-// Autonomous Neural Brain (NVIDIA NIM / Hermes Bot / OpenRouter OAuth / OpenAI / Gemini / Groq)
+// Hermes Buddy Brain Client (ESP8266 = Body, Hermes = Brain with Memory & Auth)
+// Zero cloud API keys stored in firmware!
 // ---------------------------------------------------------------------------
-bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, const char* sourceTag) {
-  if (!netConnected()) return false;
-  if (!s.pet.aiKey[0] && s.pet.aiProvider != 1) return false;
+static bool isHourActive(uint8_t curH, uint8_t startH, uint8_t endH) {
+  if (startH == endH) return true;
+  if (startH < endH)  return (curH >= startH && curH <= endH);
+  return (curH >= startH || curH <= endH);
+}
 
-  // Build live context string (time, weather, NOC status)
+static void clampThreeScreenLines(const char* in, char* out, size_t outSize) {
+  char clean[64];
+  sanitizeAscii(in, clean, sizeof(clean));
+  // Collapse newlines/tabs into single spaces and clamp to 54 chars (3 lines x 18 chars)
+  size_t j = 0;
+  bool lastSpace = true;
+  for (size_t i = 0; clean[i] != 0 && j + 1 < outSize && j < 54; i++) {
+    char c = clean[i];
+    if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+    if (c == ' ') {
+      if (lastSpace) continue;
+      lastSpace = true;
+    } else {
+      lastSpace = false;
+    }
+    out[j++] = c;
+  }
+  while (j > 0 && out[j - 1] == ' ') j--;
+  out[j] = 0;
+}
+
+static const char* kOfflinePhrases[] = {
+  "Rede 100% monitorada aqui no NOC!",
+  "Fones sintonizados nos seus pacotes!",
+  "Pronta para mais um turno com voce!",
+  "Links estaveis e olhos atentos!",
+  "Tomando um cafe virtual no plantao!",
+  "Sistemas verificados, tudo em ordem!"
+};
+
+bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, const char* sourceTag) {
+  if (!netConnected() || !s.pet.hermesUrl[0]) {
+    // Offline fallback phrase so the buddy body always responds charismatically
+    const char* fb = kOfflinePhrases[(millis() / 1000) % 6];
+    clampThreeScreenLines(fb, _lastAiReply, sizeof(_lastAiReply));
+    triggerSay(_lastAiReply, PET_MOOD_HAPPY, 25, "OFFLINE");
+    return false;
+  }
+
   struct tm t;
   char timeStr[12] = "agora";
   if (clockNow(t)) {
     snprintf(timeStr, sizeof(timeStr), "%02d:%02d", t.tm_hour, t.tm_min);
+    // Respect configured active hours for autonomous thoughts
+    if (!customPrompt && !isHourActive((uint8_t)t.tm_hour, s.pet.activeStartHour, s.pet.activeEndHour)) {
+      return false;
+    }
   }
 
   int upCount = 0, downCount = 0;
@@ -342,241 +385,94 @@ bool PetMode::triggerNeuralThought(const Settings& s, const char* customPrompt, 
     }
   }
 
-  char promptBuf[360];
-  if (customPrompt && customPrompt[0]) {
-    snprintf(promptBuf, sizeof(promptBuf),
-             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), parceira do Alex e do Hermes Bot. Hora:%s Clima:%.1fC HostsUP:%d Down:%d. Alex disse: \"%s\". Responda em Portugues sem acentos, max 50 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry|love\",\"say\":\"frase\"}",
-             timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, customPrompt);
-  } else {
-    snprintf(promptBuf, sizeof(promptBuf),
-             "Voce e DhexterBot (NOC Cyber Girl anime de fones neon azuis), guardiana de rede integrada ao Hermes Bot e Zabbix. Hora:%s Clima:%.1fC HostsUP:%d Down:%d ZbxAlerts:%d. Gere um comentario espontaneo carismatico em Portugues sem acentos, max 50 chars, APENAS JSON: {\"mood\":\"happy|normal|curious|excited|cool|cyber|angry\",\"say\":\"frase\"}",
-             timeStr, _weatherValid ? _weatherTemp : 26.0f, upCount, downCount, _zbxProblems > 0 ? _zbxProblems : 0);
+  String hUrl = String(s.pet.hermesUrl);
+  hUrl.trim();
+  int schemeIdx = hUrl.indexOf("://");
+  int slashIdx  = hUrl.indexOf('/', schemeIdx >= 0 ? schemeIdx + 3 : 0);
+  if (slashIdx < 0) {
+    hUrl += "/api/buddy/think";
+  } else if (slashIdx == (int)hUrl.length() - 1) {
+    hUrl += "api/buddy/think";
   }
 
-  // Prepare JSON body
   JsonDocument reqDoc;
-  uint8_t prov = s.pet.aiProvider;
+  reqDoc["event"]           = (customPrompt && customPrompt[0]) ? "chat" : "autonomous";
+  reqDoc["prompt"]          = (customPrompt && customPrompt[0]) ? customPrompt : "";
+  reqDoc["persona"]         = s.pet.hermesPersona;
+  reqDoc["time"]            = timeStr;
+  reqDoc["tempC"]           = _weatherValid ? _weatherTemp : 26.0f;
+  reqDoc["hostsUp"]         = upCount;
+  reqDoc["hostsDown"]       = downCount;
+  reqDoc["zbxAlerts"]       = _zbxProblems > 0 ? _zbxProblems : 0;
+  reqDoc["maxLines"]        = 3;
+  reqDoc["maxCharsPerLine"] = 18;
 
-  // If provider 1 (Universal Hermes Agent Gateway — OpenAI-compatible or REST/Webhook) is selected
-  if (prov == 1 && s.pet.hermesUrl[0]) {
-    String hUrl = String(s.pet.hermesUrl);
-    hUrl.trim();
-    // Auto-normalize URL: if it ends with /v1, append /chat/completions; if bare host:port, append /v1/chat/completions
-    if (hUrl.endsWith("/v1")) {
-      hUrl += "/chat/completions";
-    } else if (hUrl.endsWith("/v1/")) {
-      hUrl += "chat/completions";
-    } else {
-      int schemeIdx = hUrl.indexOf("://");
-      int slashIdx  = hUrl.indexOf('/', schemeIdx >= 0 ? schemeIdx + 3 : 0);
-      if (slashIdx < 0) {
-        hUrl += "/v1/chat/completions";
-      } else if (slashIdx == (int)hUrl.length() - 1) {
-        hUrl += "v1/chat/completions";
-      }
-    }
-
-    reqDoc["model"]    = s.pet.aiModel[0] ? s.pet.aiModel : "hermes-agent";
-    reqDoc["message"]  = promptBuf;
-    reqDoc["prompt"]   = promptBuf;
-    reqDoc["max_tokens"] = 90;
-    JsonArray hMsgs = reqDoc["messages"].to<JsonArray>();
-    JsonObject hm0 = hMsgs.add<JsonObject>();
-    hm0["role"]    = "user";
-    hm0["content"] = promptBuf;
-
-    String body;
-    serializeJson(reqDoc, body);
-    reqDoc.clear();
-
-    HTTPClient http;
-    http.setTimeout(5000);
-    bool begun = false;
-#if defined(SMALLTV_ESP8266)
-    std::unique_ptr<BearSSL::WiFiClientSecure> hSec;
-#else
-    std::unique_ptr<WiFiClientSecure> hSec;
-#endif
-    WiFiClient hPlain;
-
-    if (hUrl.startsWith("https://")) {
-#if defined(SMALLTV_ESP8266)
-      hSec.reset(new BearSSL::WiFiClientSecure());
-      hSec->setInsecure();
-      hSec->setBufferSizes(1024, 512);
-#else
-      hSec.reset(new WiFiClientSecure());
-      hSec->setInsecure();
-#endif
-      begun = http.begin(*hSec, hUrl);
-    } else {
-      begun = http.begin(hPlain, hUrl);
-    }
-
-    if (begun) {
-      http.addHeader("Content-Type", "application/json");
-      if (s.pet.aiKey[0]) {
-        http.addHeader("Authorization", String("Bearer ") + s.pet.aiKey);
-        http.addHeader("X-API-Key", s.pet.aiKey);
-      }
-      int code = http.POST(body);
-      if (code == 200) {
-        String resp = http.getString();
-        http.end();
-        JsonDocument resDoc;
-        if (!deserializeJson(resDoc, resp)) {
-          const char* rawReply = resDoc["choices"][0]["message"]["content"] |
-                                 (resDoc["say"] | (resDoc["reply"] | (resDoc["message"] | (resDoc["output"] | (resDoc["response"] | "")))));
-          const char* md = resDoc["mood"] | "cyber";
-          if (rawReply && rawReply[0]) {
-            String cStr(rawReply);
-            cStr.trim();
-            int js = cStr.indexOf('{');
-            int je = cStr.lastIndexOf('}');
-            String finalSay = cStr;
-            uint8_t finalMood = petMoodFromStr(md);
-            if (js >= 0 && je > js) {
-              JsonDocument inner;
-              if (!deserializeJson(inner, cStr.substring(js, je + 1))) {
-                if (inner["say"].is<const char*>())  finalSay  = inner["say"].as<const char*>();
-                if (inner["mood"].is<const char*>()) finalMood = petMoodFromStr(inner["mood"].as<const char*>());
-              }
-            }
-            sanitizeAscii(finalSay.c_str(), _lastAiReply, sizeof(_lastAiReply));
-            _aiThoughtsCount++;
-            triggerSay(_lastAiReply, finalMood, 35, "HERMES AI");
-            return true;
-          }
-        }
-      } else {
-        http.end();
-      }
-    }
-    // If Hermes endpoint is unreachable and an API key is configured, fall back to cloud LLM
-    if (!s.pet.aiKey[0]) return false;
-    prov = 0;
-  }
-
-  const char* url = "https://integrate.api.nvidia.com/v1/chat/completions";
-  const char* defModel = "nvidia/nemotron-3.5-super-vl-120b-a12b";
-  if (prov == 2) {
-    url = "https://openrouter.ai/api/v1/chat/completions";
-    defModel = "openai/gpt-4o-mini";
-  } else if (prov == 3) {
-    url = "https://api.openai.com/v1/chat/completions";
-    defModel = "gpt-4o-mini";
-  } else if (prov == 5) {
-    url = "https://api.groq.com/openai/v1/chat/completions";
-    defModel = "llama-3.3-70b-versatile";
-  }
-
-  const char* modelToUse = (s.pet.aiModel[0]) ? s.pet.aiModel : defModel;
-
-#if defined(SMALLTV_ESP8266)
-  std::unique_ptr<BearSSL::WiFiClientSecure> sec(new BearSSL::WiFiClientSecure());
-  sec->setInsecure();
-  sec->setBufferSizes(1024, 512);
-#else
-  std::unique_ptr<WiFiClientSecure> sec(new WiFiClientSecure());
-  sec->setInsecure();
-#endif
-
-  HTTPClient https;
-  https.setTimeout(7500);
-
-  if (prov == 4) {
-    // Google Gemini REST API
-    String gemUrl = String("https://generativelanguage.googleapis.com/v1beta/models/") +
-                    (s.pet.aiModel[0] ? s.pet.aiModel : "gemini-2.0-flash") +
-                    ":generateContent?key=" + s.pet.aiKey;
-    if (!https.begin(*sec, gemUrl)) return false;
-    https.addHeader("Content-Type", "application/json");
-    JsonArray contents = reqDoc["contents"].to<JsonArray>();
-    JsonObject c0 = contents.add<JsonObject>();
-    JsonArray parts = c0["parts"].to<JsonArray>();
-    parts.add<JsonObject>()["text"] = promptBuf;
-  } else {
-    // OpenAI-compatible Chat Completions (NVIDIA NIM, OpenRouter, OpenAI, Groq)
-    if (!https.begin(*sec, url)) return false;
-    https.addHeader("Content-Type", "application/json");
-    https.addHeader("Authorization", String("Bearer ") + s.pet.aiKey);
-    reqDoc["model"] = modelToUse;
-    reqDoc["max_tokens"] = 90;
-    reqDoc["temperature"] = 0.75;
-    if (prov == 0) {
-      // Disable chain-of-thought reasoning tokens on NVIDIA Nemotron so reply is immediate and compact!
-      reqDoc["chat_template_kwargs"]["enable_thinking"] = false;
-    }
-    JsonArray msgs = reqDoc["messages"].to<JsonArray>();
-    JsonObject m0 = msgs.add<JsonObject>();
-    m0["role"] = "user";
-    m0["content"] = promptBuf;
-  }
-
-  String reqBody;
-  serializeJson(reqDoc, reqBody);
+  String body;
+  serializeJson(reqDoc, body);
   reqDoc.clear();
 
-  int httpCode = https.POST(reqBody);
-  if (httpCode != 200) {
-    https.end();
-    return false;
-  }
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(5000);
 
-  String payload = https.getString();
-  https.end();
-
-  JsonDocument respDoc;
-  if (deserializeJson(respDoc, payload)) return false;
-
-  const char* rawContent = nullptr;
-  if (prov == 4) {
-    rawContent = respDoc["candidates"][0]["content"]["parts"][0]["text"];
-  } else {
-    rawContent = respDoc["choices"][0]["message"]["content"];
-  }
-  if (!rawContent || !rawContent[0]) return false;
-
-  // Extract inner JSON {"mood":"...","say":"..."} if present
-  String contentStr(rawContent);
-  contentStr.trim();
-  int jStart = contentStr.indexOf('{');
-  int jEnd   = contentStr.lastIndexOf('}');
-  String sayText = contentStr;
-  uint8_t chosenMood = PET_MOOD_CYBER;
-
-  if (jStart >= 0 && jEnd > jStart) {
-    String sub = contentStr.substring(jStart, jEnd + 1);
-    JsonDocument inner;
-    if (!deserializeJson(inner, sub)) {
-      if (inner["say"].is<const char*>())  sayText = inner["say"].as<const char*>();
-      if (inner["mood"].is<const char*>()) chosenMood = petMoodFromStr(inner["mood"].as<const char*>());
+  if (http.begin(client, hUrl)) {
+    http.addHeader("Content-Type", "application/json");
+    if (s.pet.hermesToken[0]) {
+      http.addHeader("X-Buddy-Token", s.pet.hermesToken);
+      http.addHeader("Authorization", String("Bearer ") + s.pet.hermesToken);
+    }
+    int code = http.POST(body);
+    if (code == 200) {
+      String resp = http.getString();
+      http.end();
+      JsonDocument resDoc;
+      if (!deserializeJson(resDoc, resp)) {
+        const char* rawReply = resDoc["say"] |
+                               (resDoc["reply"] |
+                               (resDoc["message"] |
+                               (resDoc["output"] |
+                               (resDoc["choices"][0]["message"]["content"] | ""))));
+        const char* md  = resDoc["mood"] | "cyber";
+        const char* act = resDoc["action"] | "";
+        if (act && act[0]) {
+          triggerAction(petActionFromStr(act), 10);
+        }
+        if (rawReply && rawReply[0]) {
+          clampThreeScreenLines(rawReply, _lastAiReply, sizeof(_lastAiReply));
+          _aiThoughtsCount++;
+          triggerSay(_lastAiReply, petMoodFromStr(md), 35, sourceTag ? sourceTag : "HERMES AI");
+          return true;
+        }
+      }
+    } else {
+      http.end();
     }
   }
 
-  sanitizeAscii(sayText.c_str(), _lastAiReply, sizeof(_lastAiReply));
-  _aiThoughtsCount++;
-  triggerSay(_lastAiReply, chosenMood, 35, sourceTag ? sourceTag : "IA NEURAL");
-  return true;
+  // Graceful offline fallback if Hermes Bridge API is temporarily unreachable
+  const char* fb = kOfflinePhrases[(millis() / 1000) % 6];
+  clampThreeScreenLines(fb, _lastAiReply, sizeof(_lastAiReply));
+  triggerSay(_lastAiReply, PET_MOOD_NORMAL, 25, "OFFLINE");
+  return false;
 }
 
 void PetMode::updateNeuralBrain(const Settings& s) {
-  if (!s.pet.aiEnabled || !netConnected()) return;
+  if (!s.pet.hermesEnabled || !netConnected()) return;
   uint32_t now = millis();
 
   // First autonomous thought 18 seconds after boot once Wi-Fi & weather are ready
   if (_pendingAutoAi && now > 18000) {
     _pendingAutoAi = false;
     _lastAiMs = now;
-    triggerNeuralThought(s, nullptr, "IA NEURAL");
+    triggerNeuralThought(s, nullptr, "HERMES AI");
     return;
   }
 
-  if (s.pet.aiIntervalMin == 0) return;
-  uint32_t intervalMs = (uint32_t)s.pet.aiIntervalMin * 60000UL;
+  if (s.pet.hermesIntervalMin == 0) return;
+  uint32_t intervalMs = (uint32_t)s.pet.hermesIntervalMin * 60000UL;
   if ((now - _lastAiMs) >= intervalMs) {
     _lastAiMs = now;
-    triggerNeuralThought(s, nullptr, "IA NEURAL");
+    triggerNeuralThought(s, nullptr, "HERMES AI");
   }
 }
 
@@ -1568,8 +1464,7 @@ void PetMode::drawBottomPanel(const Settings& s) {
   g->print(srcBadge);
   g->print("]");
 
-  const char* provNames[] = {"NIM-120B", "HERMES", "OAUTH", "OPENAI", "GEMINI", "GROQ"};
-  const char* pName = provNames[s.pet.aiProvider <= 5 ? s.pet.aiProvider : 0];
+  const char* pName = s.pet.hermesEnabled ? "HERMES" : "OFFLINE";
   int16_t px = 228 - (int16_t)(strlen(pName) * 6);
   g->setTextColor(gfxTint(0x74DF), bubbleBg);
   g->setCursor(px, 166);

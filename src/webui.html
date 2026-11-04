@@ -73,8 +73,8 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
  <span id="hi" class="muted" style="margin-left:auto"></span>
 </header>
 <nav>
- <button data-t="pet" class="active">&#x1F3A7; NOC Girl &amp; Chat IA</button>
- <button data-t="ai">&#x1F9E0; Configurar IAs &amp; Hermes</button>
+ <button data-t="pet" class="active">&#x1F3A7; NOC Girl &amp; Chat Hermes</button>
+ <button data-t="ai">&#x1F9E0; C&eacute;rebro Hermes &amp; Personalidade</button>
  <button data-t="noc">&#x1F6E1;&#xFE0F; Watchdog &amp; Zabbix</button>
  <button data-t="display">&#x1F3A8; Visual &amp; Fones</button>
  <button data-t="system">&#x1F4E1; Wi-Fi &amp; Sistema</button>
@@ -211,64 +211,59 @@ code{background:#05080f;padding:2px 6px;border-radius:5px;color:var(--acc);font-
   </div>
  </section>
 
- <!-- TAB 2: CONFIGURAR IAs & HERMES BOT -->
+  <!-- TAB 2: CÉREBRO HERMES & PERSONALIDADE (ESP8266 = CORPO, HERMES = CÉREBRO) -->
  <section id="ai" class="tab">
   <div class="card" style="border-color:rgba(168,85,247,.45)">
-   <h2 style="color:#d8b4fe">&#x1F9E0; Configurar Motores de IA, Login OAuth &amp; Hermes Agent Universal</h2>
-   <div class="chk"><input id="aiEnabled" type="checkbox"><label>Ativar <b>Pensamentos Neurais Aut&ocirc;nomos</b> (a NOC Girl comenta clima, hora e estado da rede sozinha)</label></div>
+   <h2 style="color:#d8b4fe">&#x1F9E0; C&eacute;rebro Hermes (Mem&oacute;ria, Autentica&ccedil;&atilde;o &amp; Personalidade)</h2>
+   <div class="req">
+    <b>Arquitetura Segura (Buddy Body + Hermes Brain):</b> O ESP8266 n&atilde;o armazena nenhuma chave de nuvem (NVIDIA, OpenAI ou Gemini). Ele cuida apenas das anima&ccedil;&otilde;es, express&otilde;es, janela de 3 linhas e frases offline, enquanto o <b>Hermes</b> processa a IA e mant&eacute;m a mem&oacute;ria e o contexto.
+   </div>
+   <div class="chk"><input id="hermesEnabled" type="checkbox"><label>Ativar <b>Pensamentos Aut&ocirc;nomos via Hermes</b> (com fallback autom&aacute;tico para frases offline)</label></div>
    <div class="row">
     <div>
-     <label>Motor de Intelig&ecirc;ncia Artificial</label>
-     <select id="aiProvider" onchange="onAiProvChange()">
-      <option value="0">0 - NVIDIA NIM (Nemotron / Llama API)</option>
-      <option value="1">1 - Hermes Agent Universal (Qualquer Gateway HTTP / OpenAI-Compatible)</option>
-      <option value="2">2 - OpenRouter (Suporta Login OAuth PKCE 1-Clique!)</option>
-      <option value="3">3 - OpenAI Oficial (gpt-4o-mini)</option>
-      <option value="4">4 - Google Gemini (gemini-2.0-flash)</option>
-      <option value="5">5 - Groq Cloud (Llama 3.3 70B Ultra-R&aacute;pido)</option>
-     </select>
-    </div>
-    <div style="flex:0 0 180px">
-     <label>Intervalo Aut&ocirc;nomo (min)</label>
-     <input id="aiIntervalMin" type="number" min="0" max="240" value="10">
-    </div>
-   </div>
-   <div class="row">
-    <div>
-     <label>Modelo LLM / Nome do Agente</label>
-     <input id="aiModel" type="text" placeholder="hermes-agent / gpt-4o-mini / nemotron">
+     <label>URL da API Protegida do Hermes (Ponte Real)</label>
+     <input id="hermesUrl" type="url" placeholder="http://172.1.0.32:9119">
     </div>
     <div>
-     <label>Chave API / Token Bearer / OAuth</label>
-     <input id="aiKey" type="password" autocomplete="off" placeholder="(manter token salvo ou inserir novo)">
+     <label>Token de Autentica&ccedil;&atilde;o Pet &harr; Hermes (<code>X-Buddy-Token</code>)</label>
+     <input id="hermesToken" type="password" autocomplete="off" placeholder="(manter token salvo ou definir novo)">
     </div>
    </div>
-   <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <button class="btn neural" type="button" onclick="startOpenRouterOAuth()">&#x1F517; Conectar via OAuth 1-Clique (OpenRouter)</button>
-    <button class="btn sec" type="button" onclick="useUniversalHermesPreset()">&#x1F916; Preset Hermes Agent Universal</button>
-    <button class="btn sec" type="button" onclick="useHermesNvidiaPreset()">&#x26A1; Preset NVIDIA NIM</button>
-    <button class="btn sec" type="button" onclick="useOpenAiPreset()">&#x1F9E0; Preset OpenAI gpt-4o-mini</button>
-   </div>
-   <small class="hint">Compat&iacute;vel com <b>qualquer inst&acirc;ncia do Hermes Agent</b> (Nous Research <code>hermes-agent</code>, servidor OpenAI-compatible <code>/v1/chat/completions</code>, endpoint REST <code>/api/chat</code> ou nuvem).</small>
 
-   <label style="margin-top:12px">URL Universal do seu Hermes Agent (Qualquer IP, Hostname ou Dom&iacute;nio HTTP/HTTPS)</label>
-   <div class="row">
-    <input id="hermesUrl" type="url" placeholder="http://hermes.local:8000/v1/chat/completions">
+   <label style="margin-top:12px">Personalidade da Buddy (Enviada ao Hermes)</label>
+   <input id="hermesPersona" type="text" maxlength="63" placeholder="NOC Cyber Girl carismatica, prestativa e bem-humorada">
+   <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sec" type="button" onclick="sv('hermesPersona','NOC Cyber Girl carismatica, prestativa e bem-humorada');toast('Personalidade: NOC Cyber Girl')">&#x1F3A7; NOC Cyber Girl</button>
+    <button class="btn sec" type="button" onclick="sv('hermesPersona','Persocom estilo Chobits meiga, gentil e dedicada');toast('Personalidade: Chobits Meiga')">&#x1F496; Chobits Meiga</button>
+    <button class="btn sec" type="button" onclick="sv('hermesPersona','Hacker sarcastica de plantao, afiada e divertida');toast('Personalidade: Hacker Sarcastica')">&#x1F60E; Hacker Sarc&aacute;stica</button>
+    <button class="btn sec" type="button" onclick="sv('hermesPersona','Parceira de foco, produtividade e motivacao na bancada');toast('Personalidade: Coach de Foco')">&#x1F345; Coach de Foco</button>
    </div>
-   <div style="margin-top:14px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Configura&ccedil;&otilde;es de IA &amp; Hermes</button></div>
+
+   <div class="row" style="margin-top:12px">
+    <div>
+     <label>Frequ&ecirc;ncia Aut&ocirc;noma (minutos)</label>
+     <input id="hermesIntervalMin" type="number" min="1" max="240" value="10">
+    </div>
+    <div>
+     <label>Hor&aacute;rio Ativo — In&iacute;cio (0h a 23h)</label>
+     <input id="activeStartHour" type="number" min="0" max="23" value="8">
+    </div>
+    <div>
+     <label>Hor&aacute;rio Ativo — Fim (0h a 23h)</label>
+     <input id="activeEndHour" type="number" min="0" max="23" value="23">
+    </div>
+   </div>
+   <small class="hint">Fora do hor&aacute;rio ativo configurado (ex: de madrugada), o ESP8266 n&atilde;o faz chamadas autom&aacute;ticas ao Hermes e usa apenas o modo standby/offline.</small>
+   <div style="margin-top:14px"><button class="btn" onclick="saveAll()">&#x1F4BE; Salvar Configura&ccedil;&otilde;es do Hermes</button></div>
   </div>
 
   <div class="card">
-   <h2>&#x1F916; Protocolo Universal Hermes Agent &harr; DhexterBot (<code>/api/hermes</code>)</h2>
-   <small class="hint">Qualquer inst&acirc;ncia do <b>Hermes Agent</b> em qualquer rede pode descobrir as capacidades da DhexterBot via <code>GET /api/hermes</code> e interagir via <code>POST /api/hermes/webhook</code>:<br><br>
-   <b>1. Descoberta Autom&aacute;tica de Schema &amp; Status (Tool / MCP Discovery):</b><br>
-   <code>curl http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes</code><br><br>
-   <b>2. Enviar notifica&ccedil;&atilde;o, conclus&atilde;o de tarefa ou fala de qualquer Hermes:</b><br>
-   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"success","message":"Hermes: Deploy finalizado com sucesso!","mood":"excited"}'</code><br><br>
-   <b>3. Acionar alerta visual + fones vermelhos piscantes:</b><br>
-   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"alert","message":"Hermes: Anomalia detectada!","alerts":1}'</code><br><br>
-   <b>4. Fazer qualquer Hermes conversar com o C&eacute;rebro Neural da SmallTV:</b><br>
-   <code>curl -X POST http://&lt;IP-DA-DHEXTERBOT&gt;/api/hermes/webhook -H "Content-Type: application/json" -d '{"event":"ask","message":"Qual o status da bancada agora?"}'</code>
+   <h2>&#x1F512; API Protegida Pet &harr; Hermes (<code>/api/hermes/webhook</code>)</h2>
+   <small class="hint">Quando o <b>Token de Autentica&ccedil;&atilde;o</b> est&aacute; configurado acima, tanto o ESP8266 quanto a API do Hermes (`scripts/hermes_buddy_api.py` na porta <code>9119</code>) validam o cabe&ccedil;alho <code>X-Buddy-Token</code>.<br><br>
+   <b>1. Consultar status e manifesto (requer <code>X-Buddy-Token</code> se configurado):</b><br>
+   <code>curl -H "X-Buddy-Token: SEU_TOKEN" http://&lt;IP-DO-PET&gt;/api/hermes</code><br><br>
+   <b>2. Enviar fala de até 3 linhas (54 chars) + humor do Hermes para a tela:</b><br>
+   <code>curl -X POST http://&lt;IP-DO-PET&gt;/api/hermes/webhook -H "X-Buddy-Token: SEU_TOKEN" -H "Content-Type: application/json" -d '{"event":"notify","message":"Hermes conectado com memoria ativa!","mood":"cyber"}'</code>
    </small>
   </div>
  </section>
@@ -501,98 +496,32 @@ function fillTz(){var s=$('tz');if(!s)return;var keys=Object.keys(TZMAP);
 
 function setGain(id,lab,v){var n=(v!=null?v:100);sv(id,n);var e=$(lab);if(e)e.textContent=n}
 
-function onAiProvChange(){
- var p=parseInt(gv('aiProvider'))||0;
- var m=$('aiModel');
- if(!m)return;
- if(p===0) m.value='nvidia/nemotron-3.5-super-vl-120b-a12b';
- else if(p===1) m.value='hermes-agent';
- else if(p===2) m.value='openai/gpt-4o-mini';
- else if(p===3) m.value='gpt-4o-mini';
- else if(p===4) m.value='gemini-2.0-flash';
- else if(p===5) m.value='llama-3.3-70b-versatile';
-}
-function useUniversalHermesPreset(){
- sv('aiProvider',1);
- sv('aiModel','hermes-agent');
- toast('Hermes Agent Universal selecionado! Informe a URL do seu Hermes abaixo e clique em Salvar.');
-}
-function useHermesNvidiaPreset(){
- sv('aiProvider',0);
- sv('aiModel','nvidia/nemotron-3.5-super-vl-120b-a12b');
- toast('Preset NVIDIA NIM selecionado! Clique em Salvar.');
-}
-function useOpenAiPreset(){
- sv('aiProvider',3);
- sv('aiModel','gpt-4o-mini');
- toast('Preset OpenAI selecionado! Insira sua chave ou use OAuth.');
-}
-
-// 1-Click OAuth PKCE Flow via OpenRouter
-function startOpenRouterOAuth(){
- var verifier='';
- var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
- for(var i=0;i<64;i++) verifier+=chars.charAt(Math.floor(Math.random()*chars.length));
- localStorage.setItem('dhexter_pkce',verifier);
- var cb=window.location.origin+'/';
- if(window.crypto && window.crypto.subtle){
-  var enc=new TextEncoder().encode(verifier);
-  window.crypto.subtle.digest('SHA-256',enc).then(function(buf){
-   var b64=btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-   window.location.href='https://openrouter.ai/auth?callback_url='+encodeURIComponent(cb)+'&code_challenge='+encodeURIComponent(b64)+'&code_challenge_method=S256';
-  });
- }else{
-  window.location.href='https://openrouter.ai/auth?callback_url='+encodeURIComponent(cb);
- }
-}
-
-function checkOAuthCallback(){
- var params=new URLSearchParams(window.location.search);
- var code=params.get('code');
- if(!code)return;
- window.history.replaceState({},document.title,window.location.pathname);
- toast('Finalizando login OAuth...');
- var verifier=localStorage.getItem('dhexter_pkce')||'';
- var body={code:code};
- if(verifier){body.code_verifier=verifier;body.code_challenge_method='S256';}
- fetch('https://openrouter.ai/api/v1/auth/keys',{
-  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
- }).then(function(r){return r.json()}).then(function(d){
-  if(d && d.key){
-   j('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oauthKey:d.key,prompt:'Conectada via OAuth com sucesso!'})}).then(function(){
-    toast('OAuth conectado e salvo no DhexterBot!');
-    loadConfig();loadPetStatus();
-   });
-  }else toast('Falha ao trocar codigo OAuth');
- }).catch(function(e){toast('Erro OAuth: '+e.message)});
-}
-
 function sendAiChat(){
  var txt=gv('aiChatInput').trim();
- if(!txt){toast('Digite uma pergunta para a NOC Girl!');return;}
+ if(!txt){toast('Digite uma pergunta para o Hermes!');return;}
  var b=$('btnAiSend');if(b)b.disabled=true;
- toast('Consultando cerebro neural...');
+ toast('Consultando cerebro Hermes...');
  j('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:txt})}).then(function(r){
   if(b)b.disabled=false;
   sv('aiChatInput','');
   if(r.reply) $('aiLastReply').textContent=r.reply;
-  toast(r.ok?'NOC Girl respondeu na tela!':'Sem resposta da API');
+  toast(r.ok?'Hermes respondeu na tela!':'Exibida frase offline (Hermes indisponivel)');
   loadPetStatus();
- }).catch(function(e){if(b)b.disabled=false;toast('Erro IA: '+e.message)});
+ }).catch(function(e){if(b)b.disabled=false;toast('Erro: '+e.message)});
 }
 
 function triggerAutoThought(){
- toast('Gerando pensamento espontaneo...');
+ toast('Solicitando pensamento ao Hermes...');
  j('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:''})}).then(function(r){
   if(r.reply) $('aiLastReply').textContent=r.reply;
-  toast('Pensamento exibido na tela!');
+  toast(r.ok?'Pensamento do Hermes exibido na tela!':'Frase offline exibida na tela!');
   loadPetStatus();
  }).catch(function(e){toast('Erro: '+e.message)});
 }
 
 function sendHermesSim(ev,msg,mood){
  j('/api/hermes/webhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:ev,message:msg,mood:mood})}).then(function(r){
-  toast('Evento Hermes Bot recebido na tela!');
+  toast('Evento Hermes exibido na tela!');
   loadPetStatus();
  }).catch(function(e){toast('Erro: '+e.message)});
 }
@@ -603,7 +532,7 @@ function renderWatchTargets(arr){
   {name:'Internet',host:'1.1.1.1',port:53,enabled:true},
   {name:'Google DNS',host:'8.8.8.8',port:53,enabled:true},
   {name:'Zabbix NOC',host:'10.10.1.26',port:80,enabled:true},
-  {name:'Hermes Agent',host:'hermes.local',port:8000,enabled:false}
+  {name:'Hermes Brain',host:'172.1.0.32',port:9119,enabled:false}
  ];
  var html='';
  for(var i=0;i<4;i++){
@@ -667,12 +596,13 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  sv('zbxMinSev',pt.zbxMinSev!=null?pt.zbxMinSev:3);
  var zt=$('zbxToken'); if(zt){zt.value='';zt.placeholder=pt.zbxTokenSet?'(token salvo na flash)':'Cole o token da API Zabbix';}
 
- sc('aiEnabled',pt.aiEnabled!==false);
- sv('aiProvider',pt.aiProvider!=null?pt.aiProvider:0);
- sv('aiModel',pt.aiModel||'nvidia/nemotron-3.5-super-vl-120b-a12b');
+ sc('hermesEnabled',pt.hermesEnabled!==false);
  sv('hermesUrl',pt.hermesUrl||'http://172.1.0.32:9119');
- sv('aiIntervalMin',pt.aiIntervalMin!=null?pt.aiIntervalMin:10);
- var ak=$('aiKey'); if(ak){ak.value='';ak.placeholder=pt.aiKeySet?'(chave neural ativa na flash)':'Cole sua API Key ou use OAuth';}
+ sv('hermesPersona',pt.hermesPersona||'NOC Cyber Girl carismatica, prestativa e bem-humorada');
+ sv('hermesIntervalMin',pt.hermesIntervalMin!=null?pt.hermesIntervalMin:10);
+ sv('activeStartHour',pt.activeStartHour!=null?pt.activeStartHour:8);
+ sv('activeEndHour',pt.activeEndHour!=null?pt.activeEndHour:23);
+ var htk=$('hermesToken'); if(htk){htk.value='';htk.placeholder=pt.hermesTokenSet?'(token X-Buddy-Token ativo na flash)':'Defina o token compartilhado com o Hermes';}
 
  renderWatchTargets(pt.targets);
 
@@ -704,17 +634,18 @@ function collect(){
   zbxEnabled:gc('zbxEnabled'),
   zbxUrl:gv('zbxUrl'),
   zbxMinSev:parseInt(gv('zbxMinSev'))||3,
-  aiEnabled:gc('aiEnabled'),
-  aiProvider:parseInt(gv('aiProvider'))||0,
-  aiModel:gv('aiModel')||'nvidia/nemotron-3.5-super-vl-120b-a12b',
+  hermesEnabled:gc('hermesEnabled'),
   hermesUrl:gv('hermesUrl')||'http://172.1.0.32:9119',
-  aiIntervalMin:parseInt(gv('aiIntervalMin'))||10,
+  hermesPersona:gv('hermesPersona')||'NOC Cyber Girl carismatica, prestativa e bem-humorada',
+  hermesIntervalMin:parseInt(gv('hermesIntervalMin'))||10,
+  activeStartHour:parseInt(gv('activeStartHour'))||8,
+  activeEndHour:parseInt(gv('activeEndHour'))||23,
   targets:collectWatchTargets()
  };
  var ztk=gv('zbxToken').trim();
  if(ztk) pt.zbxToken=ztk;
- var aik=gv('aiKey').trim();
- if(aik) pt.aiKey=aik;
+ var htk=gv('hermesToken').trim();
+ if(htk) pt.hermesToken=htk;
 
  var o={
   mode:'pet',
@@ -889,7 +820,6 @@ function upload(){var f=$('fw').files[0];if(!f){toast('Escolha um arquivo firmwa
  x.send(fd);
 }
 
-checkOAuthCallback();
 loadConfig().then(loadStatus,loadStatus);
 </script>
 </body></html>

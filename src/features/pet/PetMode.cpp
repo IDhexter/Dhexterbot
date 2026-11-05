@@ -103,35 +103,31 @@ static uint16_t scaleColor565(uint16_t c, uint8_t pct) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
-// Helper to sanitize UTF-8 Portuguese accents to clean ASCII for the 5x7 bitmap font
-static void sanitizeAscii(const char* in, char* out, size_t maxLen) {
+// Normalize incoming text while preserving Portuguese UTF-8 glyphs.
+static void normalizeDialogText(const char* in, char* out, size_t maxLen) {
   if (!in || maxLen == 0) {
     if (maxLen > 0) out[0] = 0;
     return;
   }
   size_t j = 0;
+  bool lastSpace = true;
   for (size_t i = 0; in[i] != 0 && j + 1 < maxLen; i++) {
     uint8_t c = (uint8_t)in[i];
-    if (c == 0xC3 && in[i + 1] != 0) {
-      uint8_t n = (uint8_t)in[++i];
-      char rep = 0;
-      if (n >= 0xA0 && n <= 0xA5) rep = 'a';
-      else if (n >= 0x80 && n <= 0x85) rep = 'A';
-      else if (n >= 0xA8 && n <= 0xAB) rep = 'e';
-      else if (n >= 0x88 && n <= 0x8B) rep = 'E';
-      else if (n >= 0xAC && n <= 0xAF) rep = 'i';
-      else if (n >= 0x8C && n <= 0x8F) rep = 'I';
-      else if (n >= 0xB2 && n <= 0xB6) rep = 'o';
-      else if (n >= 0x92 && n <= 0x96) rep = 'O';
-      else if (n >= 0xB9 && n <= 0xBC) rep = 'u';
-      else if (n >= 0x99 && n <= 0x9C) rep = 'U';
-      else if (n == 0xA7) rep = 'c';
-      else if (n == 0x87) rep = 'C';
-      if (rep) out[j++] = rep;
+    if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+    if (c == ' ') {
+      if (lastSpace) continue;
+      out[j++] = ' ';
+      lastSpace = true;
     } else if (c >= 32 && c <= 126) {
       out[j++] = (char)c;
+      lastSpace = false;
+    } else if (c == 0xC3 && in[i + 1] != 0 && j + 2 < maxLen) {
+      out[j++] = (char)c;
+      out[j++] = in[++i];
+      lastSpace = false;
     }
   }
+  while (j > 0 && out[j - 1] == ' ') j--;
   out[j] = 0;
 }
 
@@ -144,6 +140,7 @@ void PetMode::begin(const Settings& s) {
   _nextBlinkMs   = millis() + 1800;
   _nextSaccadeMs = millis() + 1200;
   _nextPhraseMs  = millis() + 12000;
+  _nextDialogPageMs = millis() + 4000;
   _lastWeatherMs = 0;
   _lastSysCheckMs = 0;
   _lastAiMs      = millis();
@@ -205,9 +202,11 @@ void PetMode::triggerSay(const char* text, uint8_t mood, uint16_t ttlSec, const 
     _speechActive  = false;
     _speechText[0] = 0;
   } else {
-    sanitizeAscii(text, _speechText, sizeof(_speechText));
+    normalizeDialogText(text, _speechText, sizeof(_speechText));
     strlcpy(_speechSource, (source && source[0]) ? source : "NOC-GIRL", sizeof(_speechSource));
     _speechActive = true;
+    _dialogPage = 0;
+    _nextDialogPageMs = millis() + 4000;
     if (ttlSec < 2)   ttlSec = 2;
     if (ttlSec > 300) ttlSec = 300;
     _speechUntil = millis() + (uint32_t)ttlSec * 1000UL;
@@ -263,13 +262,13 @@ void PetMode::forceSystemCheck() {
 void PetMode::pushExternalAlert(const char* source, const char* message, int alertsCount) {
   _zbxProblems = alertsCount;
   if (alertsCount > 0) {
-    char msg[68];
     if (message && message[0]) {
-      strlcpy(msg, message, sizeof(msg));
+      triggerSay(message, PET_MOOD_ANGRY, 45, source ? source : "ZABBIX");
     } else {
+      char msg[96];
       snprintf(msg, sizeof(msg), "ALERTA %s: %d incidente(s) ativos na rede!", source ? source : "NOC", alertsCount);
+      triggerSay(msg, PET_MOOD_ANGRY, 45, source ? source : "ZABBIX");
     }
-    triggerSay(msg, PET_MOOD_ANGRY, 45, source ? source : "ZABBIX");
   } else {
     triggerAction(PET_ACT_CELEBRATE, 10);
     if (message && message[0]) triggerSay(message, PET_MOOD_EXCITED, 25, source ? source : "ZABBIX");
@@ -302,7 +301,7 @@ void PetMode::pushHermesEvent(const char* eventType, const char* message, const 
   }
 
   const char* msg = (message && message[0]) ? message : "Hermes Agent conectado e sincronizado!";
-  strlcpy(_lastAiReply, msg, sizeof(_lastAiReply));
+  normalizeDialogText(msg, _lastAiReply, sizeof(_lastAiReply));
   triggerSay(msg, m, 40, "HERMES AI");
   _hudDirty    = true;
   _footerDirty = true;
@@ -329,24 +328,7 @@ static bool isHourActive(uint8_t curH, uint8_t startH, uint8_t endH) {
 }
 
 static void clampThreeScreenLines(const char* in, char* out, size_t outSize) {
-  char clean[64];
-  sanitizeAscii(in, clean, sizeof(clean));
-  // Collapse newlines/tabs into single spaces and clamp to 54 chars (3 lines x 18 chars)
-  size_t j = 0;
-  bool lastSpace = true;
-  for (size_t i = 0; clean[i] != 0 && j + 1 < outSize && j < 54; i++) {
-    char c = clean[i];
-    if (c == '\r' || c == '\n' || c == '\t') c = ' ';
-    if (c == ' ') {
-      if (lastSpace) continue;
-      lastSpace = true;
-    } else {
-      lastSpace = false;
-    }
-    out[j++] = c;
-  }
-  while (j > 0 && out[j - 1] == ' ') j--;
-  out[j] = 0;
+  normalizeDialogText(in, out, outSize);
 }
 
 static const char* kOfflinePhrases[] = {
@@ -699,7 +681,15 @@ void PetMode::updateBrain(const Settings& s) {
   if (!_speechActive && (int32_t)(now - _nextPhraseMs) >= 0) {
     _nextPhraseMs = now + 10000;
     _phraseIdx    = (_phraseIdx + 1) % 6;
+    _dialogPage   = 0;
+    _nextDialogPageMs = now + 4000;
     _footerDirty  = true;
+  }
+
+  if (s.pet.viewMode == 0 && (int32_t)(now - _nextDialogPageMs) >= 0) {
+    _dialogPage++;
+    _nextDialogPageMs = now + 4000;
+    _footerDirty = true;
   }
 
   struct tm t;
@@ -910,29 +900,34 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
   const bool compact  = (areaH < 120);
 
   uint16_t rawNeon    = presetColor565(s.pet.colorPreset, _activeMood, _activeAction);
-  uint16_t colNeon    = gfxTint(rawNeon);
   uint16_t colNeonDim = gfxTint(scaleColor565(rawNeon, 45));
 
-  // Signature NOC Cyber Girl Palette (RGB565)
-  uint16_t colHair     = gfxTint(0x0842); // Jet-black / midnight navy hair (#080d1a)
-  uint16_t colSkin     = gfxTint(0xE77F); // Cool blue-tinted porcelain skin (#e4effa)
-  uint16_t colSkinShad = gfxTint(0x74DF); // Comic-noir contour shadow (#7c9bc0)
-  uint16_t colNeck     = gfxTint(0xC6DF); // Shaded neck porcelain (#c5d8ee)
-  uint16_t colWhite    = gfxTint(0xFFFF); // Pure white shine / catchlights / headband
-  uint16_t colHeadband = gfxTint(0xDF1D); // White-silver headband arch
-  uint16_t colSclera   = gfxTint(0xF7FF); // Crisp white-blue sclera
-  uint16_t colIrisTop  = gfxTint(0x08A5); // Deep navy upper iris (#09152b)
-  uint16_t colIrisMid  = gfxTint(0x1A7B); // Royal sapphire mid iris (#1d4ed8)
-  uint16_t colIrisBot  = gfxTint(0x3DFF); // Luminous cyan lower iris (#38bdf8)
-  uint16_t colLash     = gfxTint(0x0022); // Deep obsidian eyeliner & pupil
-  uint16_t colBlush    = gfxTint(0xF993); // Rosy pink anime blush
-  uint16_t colLipUp    = gfxTint(0x29EB); // Defined upper lip
-  uint16_t colLipBot   = gfxTint(0x8D7B); // Glossy lower lip
-  uint16_t colRedAlert = gfxTint(0xF8A4); // Crimson red alert LED
-  uint16_t colCyanLed  = gfxTint(0x07FF); // Switch port cyan LED
-  uint16_t colGreenLed = gfxTint(0x07EC); // Switch port green LED
-  uint16_t colRackBg   = gfxTint(0x0884); // Server rack frame
-  uint16_t colSwitchBg = gfxTint(0x1107); // 1U switch faceplate
+  // -------------------------------------------------------------------------
+  // Mandatory Cyber-Anime Blue Buddy Fixed Palette (RGB565)
+  // -------------------------------------------------------------------------
+  uint16_t colBlack        = gfxTint(0x0000); // Deep near-black background (#000000)
+  uint16_t colNavy         = gfxTint(0x0865); // Dark navy for shadows, depth & suit (#0a1228)
+  uint16_t colSapphire     = gfxTint(0x1A7B); // Royal sapphire blue for hair & iris (#1d4ed8)
+  uint16_t colElectricBlue = gfxTint(0x1BF7); // Luminous electric blue highlights (#1a7fff)
+  uint16_t colCyan         = gfxTint(0x07FF); // Vibrant glowing neon cyan (#00ffff)
+  uint16_t colViolet       = gfxTint(0x497B); // Subtle violet-blue reflection (#4c38d8)
+
+  uint16_t colHeadbandDark  = gfxTint(0x0926); // Modern dark headphones arch (#0c1830)
+
+  // Natural Anime Features
+  uint16_t colSkin          = gfxTint(0xFED6); // Warm porcelain anime skin (#fde2d4)
+  uint16_t colSkinShad      = gfxTint(0xEDA7); // Soft contour shadow (#e0b4a4)
+  uint16_t colBlush         = gfxTint(0xFA94); // Rosy pink anime blush (#f77b94)
+  uint16_t colLash          = gfxTint(0x0842); // Deep obsidian eyeliner & pupil (#080d1a)
+  uint16_t colWhite         = gfxTint(0xFFFF); // Pure white catchlights & shine (#ffffff)
+  uint16_t colSuit          = gfxTint(0x08A6); // Cyber suit navy (#0d1936)
+  uint16_t colLipLine       = gfxTint(0x9188); // Subtle anime lip contour
+  uint16_t colLipGloss      = gfxTint(0xF38E); // Soft natural lip gloss (#f07185)
+  uint16_t colSclera        = gfxTint(0xF7FF); // Soft crisp blue-white sclera (#eef8ff)
+  uint16_t colIrisTop       = gfxTint(0x090A); // Deep navy upper iris (#09152b)
+  uint16_t colIrisMid       = gfxTint(0x1A7B); // Sapphire blue mid iris
+  uint16_t colIrisBot       = gfxTint(0x07BF); // Luminous cyan lower iris (#00ddff)
+  uint16_t colRedAlert      = gfxTint(0xF8A4); // Crimson red alert LED
 
   bool alert = anySystemDown(s);
 
@@ -943,17 +938,17 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
   // Head center
   int hx = 120 + (gx / 4);
-  int hy = (compact ? 48 : 63) + (gy / 3);
+  int hy = (compact ? 48 : 61) + (gy / 3);
   int scalePct = compact ? 72 : 92;
 
   // Eye centers & dimensions
-  int eyeSep = (27 * scalePct) / 100;
+  int eyeSep = (26 * scalePct) / 100;
   int lx = hx - eyeSep;
   int rx = hx + eyeSep;
   int ey = hy + (4 * scalePct) / 100;
 
   int eyeHW = (16 * scalePct) / 100;
-  int baseEyeHH = (18 * scalePct) / 100;
+  int baseEyeHH = (17 * scalePct) / 100;
   int lhh = max(1, (int)roundf(baseEyeHH * _openL));
   int rhh = max(1, (int)roundf(baseEyeHH * _openR));
 
@@ -967,20 +962,20 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
   // Mouth position & lip-sync openness
   int mouthX = hx;
-  int mouthY = hy + (32 * scalePct) / 100;
+  int mouthY = hy + (33 * scalePct) / 100;
   bool talking = _speechActive || (_activeAction == PET_ACT_COFFEE);
   int talkH = talking ? (2 + (int)(fabsf(sinf((float)_animTick * 0.55f)) * 6.0f)) : 0;
 
   // Headphone earcup centers
-  int cupOffset = (62 * scalePct) / 100;
+  int cupOffset = (58 * scalePct) / 100;
   int lCupX = hx - cupOffset;
   int rCupX = hx + cupOffset;
   int cupY  = hy - (2 * scalePct) / 100;
-  int cupRX = (14 * scalePct) / 100;
-  int cupRY = (24 * scalePct) / 100;
+  int cupRX = (12 * scalePct) / 100;
+  int cupRY = (22 * scalePct) / 100;
 
   bool pulseBright = ((_animTick / 4) & 1) == 0;
-  uint16_t colRingActive = alert ? (pulseBright ? colRedAlert : colNeonDim) : colNeon;
+  uint16_t colRingActive = alert ? (pulseBright ? colRedAlert : colNeonDim) : colCyan;
 
   uint8_t acc = s.pet.accessory;
   if (_activeMood == PET_MOOD_COOL) acc = 1; // Sunglasses
@@ -989,36 +984,30 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
   for (int y = 0; y < areaH; y++) {
     // -----------------------------------------------------------------------
-    // 1. CLEAN DARK STUDIO BACKDROP (No switches behind her!)
+    // 1. NEAR-BLACK BACKGROUND (High contrast, pitch dark)
     // -----------------------------------------------------------------------
-    uint16_t bgCol = (y < areaH / 2) ? gfxTint(0x0021) : gfxTint(0x0842);
     for (int x = 0; x < areaW; x++) {
-      rowBuf[x] = bgCol;
+      rowBuf[x] = colBlack;
     }
 
-    int dy = ((y - hy) * 100) / scalePct; // Normalized vertical coordinate relative to head center
+    int dy = ((y - hy) * 100) / scalePct;
 
     // -----------------------------------------------------------------------
-    // 2. JET-BLACK BOB HAIR BACK + UPTURNED FLIPPED TIPS (FIXED HAIR COLOR!)
+    // 2. BLUE BOB HAIR BACK & SIDES (Chanel Silhouette)
     // -----------------------------------------------------------------------
-    uint16_t colHairRim = gfxTint(0x1A56); // Fixed subtle studio blue-slate rim (hair never changes color!)
     if (dy >= -68 && dy <= 66) {
       int hairHW = 0;
-      if (dy < -20) {
-        // Upper dome of hair
-        int d = dy + 20;
-        int r2 = 48 * 48 - d * d;
+      if (dy < -18) {
+        int d = dy + 18;
+        int r2 = 50 * 50 - d * d;
         hairHW = (r2 > 0) ? (22 + (int)sqrtf((float)r2)) : 0;
-      } else if (dy <= 32) {
-        // Sleek bob sides widening gently downward
-        hairHW = 70 + ((dy + 20) * 10) / 52;
-      } else if (dy <= 56) {
-        // Signature upturned flipped-out bob curls on left & right!
-        int curlProgress = dy - 32; // 0..24
-        hairHW = 80 + (12 - abs(curlProgress - 10));
+      } else if (dy <= 22) {
+        hairHW = 72 + ((dy + 18) * 8) / 40;
+      } else if (dy <= 46) {
+        int t = dy - 22;
+        hairHW = 80 - (t * t * 14) / (24 * 24);
       } else {
-        // Lower tapered hair bottom
-        hairHW = 72 - ((dy - 56) * 28) / 10;
+        hairHW = 66 - ((dy - 46) * 26) / 20;
       }
 
       if (hairHW > 0) {
@@ -1028,56 +1017,114 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
         for (int x = x0; x <= x1; x++) {
           int adx = abs(x - hx);
           int normAdx = (adx * 100) / scalePct;
-          if (dy >= 24 && dy <= 40 && normAdx >= 72 && normAdx <= 78 && dy < 32 + (normAdx - 72)) {
-            continue;
+
+          if (dy >= 45 && normAdx <= 22) {
+            continue; // Open space for neck & cyber collar
           }
+
           if (adx >= realHW) {
-            rowBuf[x] = colHairRim; // Fixed hair outline color!
+            rowBuf[x] = colNavy;
           } else {
-            rowBuf[x] = colHair;
+            uint16_t pix = colSapphire;
+            if (normAdx >= 64) {
+              pix = ((adx + dy) % 3 == 0) ? colElectricBlue : colSapphire;
+            } else if (dy >= 30 && normAdx <= 42) {
+              pix = colNavy;
+            } else {
+              pix = colSapphire;
+            }
+
+            // Violet-blue undertone sheen
+            if (normAdx >= 54 && dy >= 8 && dy <= 40 && ((x + y) % 6 == 0)) {
+              pix = colViolet;
+            }
+
+            // Crown cyan curved highlight arc
+            if (dy >= -54 && dy <= -42) {
+              int crownY = -48 + (normAdx * normAdx) / 140;
+              if (abs(dy - crownY) <= 2 && normAdx <= 45) {
+                pix = (abs(dy - crownY) <= 1) ? colCyan : colElectricBlue;
+              }
+            }
+
+            rowBuf[x] = pix;
           }
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 3. NECK, BLACK CHOKER & WHITE TEE COLLAR
+    // 3. NECK & CYBER SUIT (High Collar with Cyan Piping & Chest V-Chevron)
     // -----------------------------------------------------------------------
-    if (dy >= 40 && dy <= 76) {
+    if (dy >= 44) {
       int neckHW = (14 * scalePct) / 100;
       if (dy <= 58) {
         for (int x = hx - neckHW; x <= hx + neckHW; x++) {
           if (x >= 0 && x < areaW) {
-            if (dy >= 49 && dy <= 54) {
-              rowBuf[x] = colLash; // Fixed black choker
-            } else {
-              rowBuf[x] = colNeck;
-            }
+            rowBuf[x] = (dy <= 50) ? colSkinShad : colSkin;
           }
         }
-      } else {
-        // White T-Shirt Shoulders & Collar
-        int shHW = ((16 + (dy - 58) * 3) * scalePct) / 100;
+      }
+
+      if (dy >= 52) {
+        int shHW = ((20 + (dy - 52) * 4) * scalePct) / 100;
+        int vOpeningHW = max(0, ((dy - 52) * 14) / 28);
+
         for (int x = max(0, hx - shHW); x <= min(areaW - 1, hx + shHW); x++) {
           int adx = abs(x - hx);
-          if (adx >= shHW - 1) rowBuf[x] = colSkinShad;
-          else rowBuf[x] = colHeadband;
+          int normAdx = (adx * 100) / scalePct;
+
+          if (dy <= 66 && normAdx <= vOpeningHW) {
+            if (abs(normAdx - vOpeningHW) <= 2) {
+              rowBuf[x] = colCyan; // Collar glowing cyan piping
+            } else if (dy <= 56) {
+              rowBuf[x] = colSkinShad;
+            } else {
+              rowBuf[x] = colNavy; // Dark undersuit
+            }
+            continue;
+          }
+
+          if (dy <= 64 && normAdx <= 34) {
+            if (dy == 52 || normAdx >= 32) {
+              rowBuf[x] = colCyan; // Outer collar piping
+            } else {
+              rowBuf[x] = colSuit;
+            }
+            continue;
+          }
+
+          uint16_t pix = colSuit;
+          if (adx >= shHW - 2) {
+            pix = colNavy;
+          } else if (dy >= 64 && dy <= 80) {
+            int vCenter = ((dy - 64) * 22) / 16;
+            if (abs(normAdx - vCenter) <= 2) {
+              pix = colCyan; // Glowing cyan chest V-chevron
+            } else if (normAdx < vCenter) {
+              pix = colNavy;
+            } else if ((normAdx == 32 || normAdx == 33) && dy >= 68) {
+              pix = colCyan;
+            }
+          }
+
+          rowBuf[x] = pix;
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 4. PORCELAIN ANIME FACE CONTOUR + CYBER BLUSH
+    // 4. NATURAL ANIME FACE JAWLINE CONTOUR & BLUSH
     // -----------------------------------------------------------------------
-    if (dy >= -44 && dy <= 47) {
+    if (dy >= -44 && dy <= 48) {
       int faceHW = 0;
-      if (dy < 8) {
-        faceHW = 54;
+      if (dy < 6) {
+        faceHW = 51;
       } else {
-        // Smooth anime V-jaw tapering to chin at dy = 47
-        int t = dy - 8; // 0..39
-        faceHW = 54 - (t * t * 40) / (39 * 39) - (t * 14) / 39;
+        int t = dy - 6;
+        faceHW = 51 - (t * t * 37) / (42 * 42) - (t * 8) / 42;
       }
+
       if (faceHW > 0) {
         int realFHW = (faceHW * scalePct) / 100;
         for (int x = hx - realFHW; x <= hx + realFHW; x++) {
@@ -1092,45 +1139,46 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
         }
       }
 
-      // Rosy/Cyber Anime Blush on cheeks (dy = 15..23)
-      if (s.pet.showBlush && dy >= 15 && dy <= 23) {
-        int bdy = dy - 19;
+      // Cheeks & Soft Anime Blush (dy = 16..24)
+      if (s.pet.showBlush && dy >= 16 && dy <= 24) {
+        int bdy = dy - 20;
         for (int side = 0; side < 2; side++) {
-          int bx = (side == 0) ? (hx - (33 * scalePct) / 100) : (hx + (33 * scalePct) / 100);
-          int bhw = (10 * scalePct) / 100;
+          int bx = (side == 0) ? (hx - (30 * scalePct) / 100) : (hx + (30 * scalePct) / 100);
+          int bhw = (11 * scalePct) / 100;
           for (int x = bx - bhw; x <= bx + bhw; x++) {
             int bdx = x - bx;
-            if ((bdx * bdx) / 16 + (bdy * bdy) <= 5) {
-              if (((x + y) % 4) == 0) rowBuf[x] = colBlush;
-              else if (_activeMood == PET_MOOD_LOVE || _activeMood == PET_MOOD_HAPPY) rowBuf[x] = colBlush;
-              else rowBuf[x] = colSkinShad;
+            if ((bdx * bdx) / 14 + (bdy * bdy) <= 6) {
+              if (((x + y) % 3 == 0) || _activeMood == PET_MOOD_LOVE || _activeMood == PET_MOOD_HAPPY) {
+                rowBuf[x] = colBlush;
+              } else {
+                rowBuf[x] = colSkinShad;
+              }
             }
           }
         }
       }
 
-      // Subtle comic anime nose shadow (dy = 16..20)
-      if (dy >= 16 && dy <= 20) {
+      // Delicate Anime Nose (dy = 18..20)
+      if (dy >= 18 && dy <= 20) {
         if (dy == 20) {
-          rowBuf[hx - 1] = colSkinShad;
           rowBuf[hx]     = colSkinShad;
-        } else {
           rowBuf[hx - 1] = colSkinShad;
+        } else if (dy == 18) {
+          rowBuf[hx - 1] = colWhite; // Nose specular catchlight
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 5. SUPER-EXPRESSIVE MULTI-LAYERED SAPPHIRE ANIME EYES
+    // 5. LARGE SAPPHIRE ANIME EYES & EYEBROWS
     // -----------------------------------------------------------------------
     int edy = y - ey;
     if (abs(edy) <= baseEyeHH + 10) {
       for (int side = 0; side < 2; side++) {
         int cx = (side == 0) ? lx : rx;
         int hh = (side == 0) ? lhh : rhh;
-        int dir = (side == 0) ? -1 : 1; // -1 left eye, +1 right eye
+        int dir = (side == 0) ? -1 : 1;
 
-        // A. Sleepy / Blinking closed eye arch
         if (hh <= 3 || _activeMood == PET_MOOD_SLEEP) {
           for (int x = cx - eyeHW; x <= cx + eyeHW; x++) {
             int edx = x - cx;
@@ -1140,7 +1188,6 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
           continue;
         }
 
-        // B. Happy closed anime eye arch (^ ^) with lush winged lashes!
         if (_activeMood == PET_MOOD_HAPPY) {
           for (int x = cx - eyeHW - 3; x <= cx + eyeHW + 3; x++) {
             int edx = x - cx;
@@ -1152,40 +1199,31 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
           continue;
         }
 
-        // C. Open Multi-Layered Sapphire Anime Eye
         if (abs(edy) <= hh + 2) {
           for (int x = cx - eyeHW - 4; x <= cx + eyeHW + 4; x++) {
             int edx = x - cx;
-
-            // Winged upper eyeliner flick on outer edge
             if (edx * dir >= eyeHW - 2 && edx * dir <= eyeHW + 4) {
-              int wingY = -hh + 4 - ((edx * dir - (eyeHW - 2)) * 3) / 2;
+              int wingY = -hh + 3 - ((edx * dir - (eyeHW - 2)) * 3) / 2;
               if (abs(edy - wingY) <= 1) {
                 rowBuf[x] = colLash;
                 continue;
               }
             }
 
-            // Rounded anime eye boundary: (edx/eyeHW)^2 + (edy/hh)^2 <= 1
             int normDist = (edx * edx * 100) / max(1, eyeHW * eyeHW) +
                            (edy * edy * 100) / max(1, hh * hh);
             if (normDist <= 100) {
-              // Thick upper anime eyelash arch
-              int topArchY = -hh + (edx * edx) / 36;
+              int topArchY = -hh + (edx * edx) / 40;
               if (edy <= topArchY + 3) {
                 rowBuf[x] = colLash;
                 continue;
               }
-              // Delicate lower lash rim
               if (normDist >= 90 && edy > hh / 2) {
                 rowBuf[x] = colSkinShad;
                 continue;
               }
 
-              // Sclera base
               uint16_t pix = colSclera;
-
-              // Iris check (centered at igx, igy)
               int idx = edx - igx;
               int idy = edy - igy;
               int irisDist = (idx * idx * 100) / max(1, irisHW * irisHW) +
@@ -1193,27 +1231,24 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 
               if (irisDist <= 100) {
                 if (irisDist >= 84) {
-                  // Dark outer limbal ring of the anime iris
-                  pix = colLash;
+                  pix = colNavy; // Limbal ring
                 } else {
-                  // 3-stop Sapphire Vertical Gradient Iris!
                   if (idy < -irisHH / 4)      pix = colIrisTop;
                   else if (idy < irisHH / 3)  pix = colIrisMid;
                   else                        pix = colIrisBot;
 
-                  // Inner Pupil or Special Mood Symbol (Heart / Star / Cyber Ring)
                   if (_activeMood == PET_MOOD_LOVE && inHeart(idx, idy, irisHW - 2, irisHH - 2)) {
                     pix = colBlush;
                   } else if (_activeMood == PET_MOOD_EXCITED && inStar(idx, idy, irisHW - 2)) {
                     pix = gfxTint(0xFFE0);
-                  } else if (irisDist <= 26) {
+                  } else if (irisDist <= 24) {
                     pix = colLash; // Deep obsidian pupil
-                  } else if (_activeMood == PET_MOOD_CYBER && irisDist >= 30 && irisDist <= 46) {
-                    pix = colNeon; // Glowing Persocom/Cyber data ring inside iris!
+                  } else if ((_activeMood == PET_MOOD_CYBER || _activeMood == PET_MOOD_COOL) && irisDist >= 30 && irisDist <= 46) {
+                    pix = colCyan; // Concentric glowing cyber data ring
                   }
                 }
 
-                // Dual Crystal White Catchlights (Upper-Left big + Lower-Right sparkle)
+                // Two Catchlights (Top-Left big + Lower-Right sparkle)
                 int c1x = idx + irisHW / 3;
                 int c1y = idy + irisHH / 3;
                 int c2x = idx - irisHW / 3;
@@ -1237,7 +1272,7 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
     // -----------------------------------------------------------------------
     if (acc == 1 && abs(edy) <= 14) {
       if (edy >= -12 && edy <= -9) {
-        for (int x = lx - eyeHW - 4; x <= rx + eyeHW + 4; x++) rowBuf[x] = colNeon;
+        for (int x = lx - eyeHW - 4; x <= rx + eyeHW + 4; x++) rowBuf[x] = colCyan;
       }
       for (int side = 0; side < 2; side++) {
         int cx = (side == 0) ? lx : rx;
@@ -1247,88 +1282,107 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
           if (edy >= -11 && edy <= 11) {
             bool border = (abs(dx) >= lhw - 1 || edy <= -10 || edy >= 10);
             int glint = dx + edy;
-            if (border) rowBuf[x] = colNeon;
+            if (border) rowBuf[x] = colCyan;
             else if ((glint >= -8 && glint <= -4) || (glint >= 2 && glint <= 4)) rowBuf[x] = colWhite;
-            else rowBuf[x] = colHair;
+            else rowBuf[x] = colNavy;
           }
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 7. EXPRESSIVE ANIME MOUTH WITH LIP-SYNC
+    // 7. ELEGANT ANIME MOUTH WITH LIP-SYNC
     // -----------------------------------------------------------------------
     int mdy = y - mouthY;
     if (s.pet.showMouth && abs(mdy) <= 10) {
-      int mhw = (9 * scalePct) / 100;
+      int mhw = (8 * scalePct) / 100;
       if (talking && talkH >= 3) {
         for (int x = mouthX - mhw; x <= mouthX + mhw; x++) {
           int mdx = x - mouthX;
           if (mdy >= -2 && mdy <= talkH + 1 && (mdx * mdx) / 12 + (mdy * mdy) / max(2, talkH) <= 6) {
-            if (mdy == -2 || mdy == -1) rowBuf[x] = colWhite; // Upper teeth
-            else if (mdy >= talkH - 1)  rowBuf[x] = colBlush; // Tongue
+            if (mdy == -2 || mdy == -1) rowBuf[x] = colWhite;
+            else if (mdy >= talkH - 1)  rowBuf[x] = colBlush;
             else                        rowBuf[x] = colLash;
           }
         }
       } else if (_activeMood == PET_MOOD_HAPPY || _activeMood == PET_MOOD_EXCITED || _activeMood == PET_MOOD_LOVE) {
-        // Open anime happy smile
         for (int x = mouthX - mhw; x <= mouthX + mhw; x++) {
           int mdx = x - mouthX;
-          int botY = 6 - (mdx * mdx) / 14;
+          int botY = 5 - (mdx * mdx) / 14;
           if (mdy >= 0 && mdy <= botY) {
-            if (mdy == 0 || mdy == botY) rowBuf[x] = colLash;
-            else rowBuf[x] = colBlush;
+            rowBuf[x] = (mdy == 0 || mdy == botY) ? colLash : colBlush;
           }
         }
       } else if (_activeMood == PET_MOOD_ANGRY || _activeMood == PET_MOOD_SURPRISED) {
-        // Alert oval mouth
-        for (int x = mouthX - 6; x <= mouthX + 6; x++) {
+        for (int x = mouthX - 5; x <= mouthX + 5; x++) {
           int mdx = x - mouthX;
           int d2 = mdx * mdx + mdy * mdy;
-          if (d2 <= 25) rowBuf[x] = (d2 >= 15) ? colLash : colRedAlert;
+          if (d2 <= 20) rowBuf[x] = (d2 >= 12) ? colLash : colRedAlert;
         }
       } else {
-        // Signature Comic-Noir Defined Lips (from the reference photo!)
-        for (int x = mouthX - 7; x <= mouthX + 7; x++) {
+        // Delicate anime smile (contour + gloss)
+        for (int x = mouthX - 6; x <= mouthX + 6; x++) {
           int mdx = x - mouthX;
-          if (mdy >= -1 && mdy <= 1 && abs(mdx) <= 7) {
-            rowBuf[x] = colLipUp;
-          } else if (mdy >= 2 && mdy <= 4 && abs(mdx) <= 6 - (mdy - 2) * 2) {
-            rowBuf[x] = colLipBot;
+          int curveY = (mdx * mdx) / 24;
+          if (mdy == curveY) {
+            rowBuf[x] = colLipLine;
+          } else if (mdy == curveY + 1 && abs(mdx) <= 3) {
+            rowBuf[x] = colLipGloss;
           }
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 8. FULL STRAIGHT DARK BANGS + COMIC-NOIR WHITE GLOSS STREAKS
+    // 8. BLUE BANGS & FACE-FRAMING STRANDS (Forehead Layer)
     // -----------------------------------------------------------------------
-    if (dy >= -62 && dy <= -12) {
-      int bangHW = (60 * scalePct) / 100;
+    if (dy >= -64 && dy <= 38) {
+      int bangHW = (62 * scalePct) / 100;
       for (int x = max(0, hx - bangHW); x <= min(areaW - 1, hx + bangHW); x++) {
         int bdx = ((x - hx) * 100) / scalePct;
-        // Curved top of bangs
         int topLim = -60 + (bdx * bdx) / 120;
-        // Scalloped fringe bottom with natural part dips over forehead
-        int botLim = -14;
-        if (abs(bdx - 18) <= 5)      botLim = -22 + abs(bdx - 18);
-        else if (abs(bdx + 22) <= 5) botLim = -21 + abs(bdx + 22);
+
+        int botLim = -16;
+        if (bdx >= -28 && bdx < -14) {
+          botLim = -30 + (abs(bdx + 20) * 12) / 10;
+        } else if (bdx >= -14 && bdx <= -2) {
+          botLim = -24 + ((bdx + 14) * 14) / 12;
+        } else if (bdx > -2 && bdx <= 14) {
+          botLim = -18 + (abs(bdx - 6) * 10) / 8;
+        } else if (bdx > 14 && bdx <= 28) {
+          botLim = -22 + ((bdx - 14) * 8) / 14;
+        } else if (bdx < -28) {
+          botLim = 18 + ((abs(bdx) - 28) * 12) / 10;
+        } else if (bdx > 28) {
+          botLim = 16 + ((bdx - 28) * 12) / 10;
+        }
 
         if (dy >= topLim && dy <= botLim) {
-          // Comic-noir white hair shine streaks across the bangs (dy = -40..-26)
-          bool isWhiteStreak = false;
-          if (dy >= -40 && dy <= -26) {
-            int sMod = (bdx + 60) % 18;
-            int sWidth = (dy + 40) / 5;
-            if (sMod >= 7 - sWidth && sMod <= 7 + sWidth) isWhiteStreak = true;
+          uint16_t pix = colSapphire;
+
+          // Flowing cyan highlight band across bangs
+          if (dy >= -36 && dy <= -20) {
+            int hCenter = -28 - bdx / 5;
+            if (abs(dy - hCenter) <= 2) {
+              pix = (abs(dy - hCenter) <= 1) ? colCyan : colElectricBlue;
+            }
+          } else if (abs(bdx) >= 30 && dy >= -8) {
+            if (abs(bdx) == 32 || ((x + y) % 4 == 0)) {
+              pix = colElectricBlue;
+            }
           }
-          rowBuf[x] = isWhiteStreak ? colWhite : colHair;
+
+          if (dy == botLim) {
+            pix = colNavy;
+          }
+
+          rowBuf[x] = pix;
         }
       }
     }
 
-    // Expressive Eyebrows (visible cleanly at the edge of the fringe, dy = -16..-11)
-    if (dy >= -16 && dy <= -11) {
+    // Eyebrows overlay across fringe
+    if (dy >= -17 && dy <= -11) {
       for (int side = 0; side < 2; side++) {
         int cx = (side == 0) ? lx : rx;
         int dir = (side == 0) ? -1 : 1;
@@ -1336,33 +1390,38 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
           int edx = x - cx;
           int browY = -14;
           if (_activeMood == PET_MOOD_ANGRY) {
-            browY = -12 - (edx * dir) / 4; // Furrowed inward
+            browY = -12 - (edx * dir) / 4;
           } else if (_activeMood == PET_MOOD_CURIOUS && side == 1) {
-            browY = -15 + (edx * edx) / 60; // Raised right eyebrow
+            browY = -16 + (edx * edx) / 55;
+          } else if (_activeMood == PET_MOOD_HAPPY || _activeMood == PET_MOOD_EXCITED) {
+            browY = -15 + (edx * edx) / 50;
           } else {
             browY = -14 + (edx * edx) / 55;
           }
-          if (abs(dy - browY) <= 1) rowBuf[x] = colLash;
+          if (abs(dy - browY) <= 1) rowBuf[x] = colNavy;
         }
       }
     }
 
     // -----------------------------------------------------------------------
-    // 9. WHITE HEADBAND ARCH + OVER-EAR HEADPHONES WITH PULSING NEON RINGS
+    // 9. MODERN HEADPHONES (Dark Headband + Cyan Neon Strip + Earcups)
     // -----------------------------------------------------------------------
-    // Upper White Headband Arch (dy = -68..-46)
-    if (dy >= -68 && dy <= -42) {
+    if (dy >= -68 && dy <= -40) {
       int hbHW = (62 * scalePct) / 100;
       for (int x = max(0, hx - hbHW); x <= min(areaW - 1, hx + hbHW); x++) {
         int bdx = ((x - hx) * 100) / scalePct;
-        int archY = -65 + (bdx * bdx) / 165;
+        int archY = -64 + (bdx * bdx) / 165;
         if (abs(dy - archY) <= 3) {
-          rowBuf[x] = colHeadband;
+          if (abs(dy - archY) <= 1 && abs(bdx) <= 46) {
+            rowBuf[x] = colCyan; // Cyan Neon LED Light Strip
+          } else {
+            rowBuf[x] = colHeadbandDark;
+          }
         }
       }
     }
 
-    // Left & Right Over-Ear Headphone Cups with Glowing Neon Rings!
+    // Left & Right Over-Ear Headphone Earcups
     int cdy = y - cupY;
     if (abs(cdy) <= cupRY + 2) {
       for (int side = 0; side < 2; side++) {
@@ -1373,17 +1432,15 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
           int ell = (cdx * cdx * 100) / max(1, cupRX * cupRX) +
                     (cdy * cdy * 100) / max(1, cupRY * cupRY);
           if (ell <= 100) {
-            // Glowing Neon Ring at ell = 58..86
             if (ell >= 56 && ell <= 86) {
               rowBuf[x] = colRingActive;
             } else if (ell > 86) {
-              rowBuf[x] = colNeonDim;
+              rowBuf[x] = colNavy;
             } else {
-              // Inner glossy crescent highlight on earcup
               if (cdy >= 4 && cdy <= 10 && cdx * dir >= 2 && cdx * dir <= 6) {
-                rowBuf[x] = colNeon;
+                rowBuf[x] = colCyan;
               } else {
-                rowBuf[x] = colHair;
+                rowBuf[x] = colHeadbandDark;
               }
             }
           }
@@ -1407,37 +1464,179 @@ void PetMode::drawFaceRegion(const Settings& s, int16_t areaY, int16_t areaH) {
 // ---------------------------------------------------------------------------
 // View 0 Bottom Panel: Large Cyberpunk Dialogue Box (TextSize 2!) (y = 160..239)
 // ---------------------------------------------------------------------------
-static void printWrappedBig(Arduino_GFX* g, int16_t x0, int16_t y0, const char* text) {
-  if (!text || !text[0]) return;
-  g->setTextSize(2); // 12x16 big legible font! Max 18 chars per line inside 224px box
-  const int maxCols = 18;
-  const int maxLines = 3;
+enum AccentMark : uint8_t {
+  ACCENT_NONE,
+  ACCENT_ACUTE,
+  ACCENT_GRAVE,
+  ACCENT_CIRCUMFLEX,
+  ACCENT_TILDE,
+  ACCENT_DIAERESIS,
+  ACCENT_CEDILLA
+};
+
+struct PortugueseGlyph {
+  char base;
+  AccentMark accent;
+  uint8_t bytes;
+};
+
+static PortugueseGlyph decodePortugueseGlyph(const char* p) {
+  if (!p || !p[0]) return {'?', ACCENT_NONE, 0};
+  uint8_t c = (uint8_t)p[0];
+  if (c < 0x80) return {(char)c, ACCENT_NONE, 1};
+  if (c != 0xC3 || !p[1]) return {'?', ACCENT_NONE, 1};
+
+  switch ((uint8_t)p[1]) {
+    case 0x80: return {'A', ACCENT_GRAVE, 2};
+    case 0x81: return {'A', ACCENT_ACUTE, 2};
+    case 0x82: return {'A', ACCENT_CIRCUMFLEX, 2};
+    case 0x83: return {'A', ACCENT_TILDE, 2};
+    case 0x84: return {'A', ACCENT_DIAERESIS, 2};
+    case 0x87: return {'C', ACCENT_CEDILLA, 2};
+    case 0x88: return {'E', ACCENT_GRAVE, 2};
+    case 0x89: return {'E', ACCENT_ACUTE, 2};
+    case 0x8A: return {'E', ACCENT_CIRCUMFLEX, 2};
+    case 0x8B: return {'E', ACCENT_DIAERESIS, 2};
+    case 0x8C: return {'I', ACCENT_GRAVE, 2};
+    case 0x8D: return {'I', ACCENT_ACUTE, 2};
+    case 0x8E: return {'I', ACCENT_CIRCUMFLEX, 2};
+    case 0x8F: return {'I', ACCENT_DIAERESIS, 2};
+    case 0x92: return {'O', ACCENT_GRAVE, 2};
+    case 0x93: return {'O', ACCENT_ACUTE, 2};
+    case 0x94: return {'O', ACCENT_CIRCUMFLEX, 2};
+    case 0x95: return {'O', ACCENT_TILDE, 2};
+    case 0x96: return {'O', ACCENT_DIAERESIS, 2};
+    case 0x99: return {'U', ACCENT_GRAVE, 2};
+    case 0x9A: return {'U', ACCENT_ACUTE, 2};
+    case 0x9B: return {'U', ACCENT_CIRCUMFLEX, 2};
+    case 0x9C: return {'U', ACCENT_DIAERESIS, 2};
+    case 0xA0: return {'a', ACCENT_GRAVE, 2};
+    case 0xA1: return {'a', ACCENT_ACUTE, 2};
+    case 0xA2: return {'a', ACCENT_CIRCUMFLEX, 2};
+    case 0xA3: return {'a', ACCENT_TILDE, 2};
+    case 0xA4: return {'a', ACCENT_DIAERESIS, 2};
+    case 0xA7: return {'c', ACCENT_CEDILLA, 2};
+    case 0xA8: return {'e', ACCENT_GRAVE, 2};
+    case 0xA9: return {'e', ACCENT_ACUTE, 2};
+    case 0xAA: return {'e', ACCENT_CIRCUMFLEX, 2};
+    case 0xAB: return {'e', ACCENT_DIAERESIS, 2};
+    case 0xAC: return {'i', ACCENT_GRAVE, 2};
+    case 0xAD: return {'i', ACCENT_ACUTE, 2};
+    case 0xAE: return {'i', ACCENT_CIRCUMFLEX, 2};
+    case 0xAF: return {'i', ACCENT_DIAERESIS, 2};
+    case 0xB2: return {'o', ACCENT_GRAVE, 2};
+    case 0xB3: return {'o', ACCENT_ACUTE, 2};
+    case 0xB4: return {'o', ACCENT_CIRCUMFLEX, 2};
+    case 0xB5: return {'o', ACCENT_TILDE, 2};
+    case 0xB6: return {'o', ACCENT_DIAERESIS, 2};
+    case 0xB9: return {'u', ACCENT_GRAVE, 2};
+    case 0xBA: return {'u', ACCENT_ACUTE, 2};
+    case 0xBB: return {'u', ACCENT_CIRCUMFLEX, 2};
+    case 0xBC: return {'u', ACCENT_DIAERESIS, 2};
+    default:   return {'?', ACCENT_NONE, 2};
+  }
+}
+
+static void drawAccent(Arduino_GFX* g, int16_t x, int16_t y, AccentMark mark,
+                       uint8_t textSize, uint16_t color) {
+  int16_t center = (textSize == 2) ? 5 : 2;
+  switch (mark) {
+    case ACCENT_ACUTE:
+      g->drawPixel(x + center + 1, y, color); g->drawPixel(x + center, y + 1, color); break;
+    case ACCENT_GRAVE:
+      g->drawPixel(x + center - 1, y, color); g->drawPixel(x + center, y + 1, color); break;
+    case ACCENT_CIRCUMFLEX:
+      g->drawPixel(x + center - 1, y + 1, color); g->drawPixel(x + center, y, color);
+      g->drawPixel(x + center + 1, y + 1, color); break;
+    case ACCENT_TILDE:
+      g->drawPixel(x + center - 2, y + 1, color); g->drawPixel(x + center - 1, y, color);
+      g->drawPixel(x + center, y, color); g->drawPixel(x + center + 1, y + 1, color); break;
+    case ACCENT_DIAERESIS:
+      g->drawPixel(x + center - 2, y, color); g->drawPixel(x + center + 2, y, color); break;
+    case ACCENT_CEDILLA: {
+      int16_t cy = y + ((textSize == 2) ? 15 : 7);
+      g->drawPixel(x + center, cy, color); g->drawPixel(x + center - 1, cy + 1, color); break;
+    }
+    default: break;
+  }
+}
+
+static uint8_t countPortugueseGlyphs(const char* text, uint8_t maxGlyphs) {
+  uint8_t count = 0;
+  const char* p = text;
+  while (p && *p && count < maxGlyphs) {
+    PortugueseGlyph glyph = decodePortugueseGlyph(p);
+    p += glyph.bytes ? glyph.bytes : 1;
+    count++;
+  }
+  return count;
+}
+
+static uint8_t drawPortugueseText(Arduino_GFX* g, int16_t x0, int16_t y0, const char* text,
+                                  const char* end, uint8_t maxGlyphs, uint8_t textSize,
+                                  uint16_t textColor, uint16_t bgColor) {
+  if (!text) return 0;
+  g->setTextSize(textSize);
+  g->setTextColor(textColor, bgColor);
+  const char* p = text;
+  uint8_t col = 0;
+  int16_t cellW = 6 * textSize;
+  int16_t baseOffset = (textSize == 2) ? 2 : 1;
+  while (*p && (!end || p < end) && col < maxGlyphs) {
+    PortugueseGlyph glyph = decodePortugueseGlyph(p);
+    int16_t x = x0 + col * cellW;
+    g->setCursor(x, y0 + baseOffset);
+    g->write((uint8_t)glyph.base);
+    drawAccent(g, x, y0, glyph.accent, textSize, textColor);
+    p += glyph.bytes ? glyph.bytes : 1;
+    col++;
+  }
+  return col;
+}
+
+static uint8_t printWrappedBig(Arduino_GFX* g, int16_t x0, int16_t y0, const char* text,
+                               uint8_t requestedPage, uint16_t textColor, uint16_t bgColor) {
+  if (!text || !text[0]) return 0;
+  struct WrappedLine { const char* start; const char* end; };
+  WrappedLine lines[32];
+  uint8_t lineCount = 0;
   const char* p = text;
 
-  for (int line = 0; line < maxLines && *p; line++) {
+  while (*p && lineCount < 32) {
     while (*p == ' ') p++;
     if (!*p) break;
-
-    int len = (int)strlen(p);
-    int take = len;
-    if (take > maxCols) {
-      take = maxCols;
-      // Try to break cleanly at a space
-      for (int k = maxCols; k >= 8; k--) {
-        if (p[k] == ' ') {
-          take = k;
-          break;
-        }
-      }
+    const char* start = p;
+    const char* q = p;
+    const char* lastSpace = nullptr;
+    uint8_t cols = 0;
+    uint8_t spaceCol = 0;
+    while (*q && cols < 18) {
+      if (*q == ' ') { lastSpace = q; spaceCol = cols; }
+      PortugueseGlyph glyph = decodePortugueseGlyph(q);
+      q += glyph.bytes ? glyph.bytes : 1;
+      cols++;
     }
-
-    char buf[22];
-    memcpy(buf, p, take);
-    buf[take] = 0;
-    g->setCursor(x0, y0 + line * 18);
-    g->print(buf);
-    p += take;
+    const char* end = q;
+    if (*q && lastSpace && spaceCol >= 8) {
+      end = lastSpace;
+      q = lastSpace + 1;
+    }
+    lines[lineCount++] = {start, end};
+    p = q;
   }
+
+  uint8_t pageCount = (lineCount + 2) / 3;
+  uint8_t page = pageCount ? requestedPage % pageCount : 0;
+  uint8_t firstLine = page * 3;
+  g->setTextSize(2);
+  g->setTextColor(textColor, bgColor);
+
+  for (uint8_t row = 0; row < 3 && firstLine + row < lineCount; row++) {
+    const WrappedLine& line = lines[firstLine + row];
+    int16_t y = y0 + row * 18;
+    drawPortugueseText(g, x0, y, line.start, line.end, 18, 2, textColor, bgColor);
+  }
+  return pageCount;
 }
 
 void PetMode::drawBottomPanel(const Settings& s) {
@@ -1508,8 +1707,7 @@ void PetMode::drawBottomPanel(const Settings& s) {
     }
   }
 
-  g->setTextColor(textCol, bubbleBg);
-  printWrappedBig(g, 11, 181, msg);
+  printWrappedBig(g, 11, 181, msg, _dialogPage, textCol, bubbleBg);
 }
 
 // ---------------------------------------------------------------------------
@@ -1560,12 +1758,9 @@ void PetMode::drawBigClockPanel(const Settings& s) {
   g->print(dateBuf);
 
   const char* botMsg = _speechActive ? _speechText : (_lastAiReply[0] ? _lastAiReply : "NOC Cyber Girl Online");
-  char clip[34];
-  strlcpy(clip, botMsg, sizeof(clip));
-  g->setTextColor(accent, cardBg);
-  int16_t mx = 120 - (int16_t)(strlen(clip) * 3);
-  g->setCursor(max((int16_t)18, mx), 210);
-  g->print(clip);
+  uint8_t botGlyphs = countPortugueseGlyphs(botMsg, 33);
+  int16_t mx = 120 - (int16_t)(botGlyphs * 3);
+  drawPortugueseText(g, max((int16_t)18, mx), 210, botMsg, nullptr, 33, 1, accent, cardBg);
 }
 
 // ---------------------------------------------------------------------------
@@ -1616,20 +1811,22 @@ void PetMode::drawNocPanel(const Settings& s) {
   }
 
   g->drawFastHLine(14, 212, 212, borderCol);
-  char sumBuf[36];
+  char sumBuf[64];
+  const char* sumText = sumBuf;
+  uint16_t sumColor;
   if (_speechActive && _speechText[0]) {
-    strlcpy(sumBuf, _speechText, sizeof(sumBuf));
-    g->setTextColor(gfxTint(0xFFE0), cardBg);
+    sumText = _speechText;
+    sumColor = gfxTint(0xFFE0);
   } else if (s.pet.zbxEnabled && _zbxProblems >= 0) {
     snprintf(sumBuf, sizeof(sumBuf), "Zabbix API: %d incidente(s)", _zbxProblems);
-    g->setTextColor(_zbxProblems > 0 ? gfxTint(0xF800) : gfxTint(0x07E0), cardBg);
+    sumColor = _zbxProblems > 0 ? gfxTint(0xF800) : gfxTint(0x07E0);
   } else {
     snprintf(sumBuf, sizeof(sumBuf), "Hermes Events: %u | Neural: %u", (unsigned)_hermesEventsCount, (unsigned)_aiThoughtsCount);
-    g->setTextColor(gfxTint(rawMain), cardBg);
+    sumColor = gfxTint(rawMain);
   }
-  int16_t sx = 120 - (int16_t)(strlen(sumBuf) * 3);
-  g->setCursor(max((int16_t)16, sx), 219);
-  g->print(sumBuf);
+  uint8_t sumGlyphs = countPortugueseGlyphs(sumText, 34);
+  int16_t sx = 120 - (int16_t)(sumGlyphs * 3);
+  drawPortugueseText(g, max((int16_t)16, sx), 219, sumText, nullptr, 34, 1, sumColor, cardBg);
 }
 
 // ---------------------------------------------------------------------------

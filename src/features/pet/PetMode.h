@@ -126,16 +126,18 @@ class PetMode : public DisplayMode {
   uint32_t _pomoTotalMs       = 0;
   uint16_t _lastPomoSec       = 0xFFFF;
 
-  // Speech bubble & rotating phrases (68 chars -> 2 full lines of 33 chars!)
-  char     _speechText[68]    = "";
+  // Speech bubble & rotating phrases. UTF-8 text is paged in 3x18 glyphs.
+  char     _speechText[192]   = "";
   char     _speechSource[16]  = "NOC-GIRL";
   bool     _speechActive      = false;
   uint32_t _speechUntil       = 0;
   uint8_t  _phraseIdx         = 0;
   uint32_t _nextPhraseMs      = 0;
+  uint8_t  _dialogPage        = 0;
+  uint32_t _nextDialogPageMs  = 0;
 
   // Neural AI & Hermes state
-  char     _lastAiReply[68]   = "Pronta no NOC! Integrada ao Hermes Bot e Zabbix.";
+  char     _lastAiReply[192]  = "Pronta no NOC! Integrada ao Hermes Bot e Zabbix.";
   uint32_t _lastAiMs          = 0;
   uint32_t _aiThoughtsCount   = 0;
   uint32_t _hermesEventsCount = 0;

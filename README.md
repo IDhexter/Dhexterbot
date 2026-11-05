@@ -7,8 +7,8 @@ Segue a arquitetura **ESP8266 = Corpo do Buddy | Hermes = Cérebro**:
 - **Somente o Hermes como Cérebro:** o ESP8266 conversa exclusivamente com a API protegida do Hermes (`scripts/hermes_buddy_api.py` na porta `9119` no CT100 ou em qualquer host Hermes).
 - **Autenticação Mútua (`X-Buddy-Token`):** proteção bidirecional entre o Pet (`ESP8266`) e o Hermes (`CT100`).
 - **Memória e Contexto no Hermes:** o serviço `hermes_buddy_api.py` mantém histórico persistente (`~/.hermes/dhexterbot_memory.json`) e contexto de conversas/eventos.
-- **Corpo Autônomo no ESP8266:** o ESP8266 cuida de todas as animações a 30 FPS, 12 expressões anime safira, lip-sync, fones com anel LED neon (cabelo chanel preto 100% fixo) e frases offline caso o Hermes esteja indisponível.
-- **Janela Grande de 3 Linhas (`12x16` Bold):** todas as respostas são limitadas e formatadas para até **3 linhas de 18 caracteres (`54 chars`)**, sem switches no fundo.
+- **Corpo Autônomo no ESP8266:** o ESP8266 cuida de todas as animações a 30 FPS, expressões anime safira, lip-sync, cabelo chanel azul com reflexos ciano, fones com anel LED neon e frases offline caso o Hermes esteja indisponível.
+- **Diálogo Paginado com Português:** a janela mantém letras grandes em blocos de **3 linhas de 18 caracteres**, alterna automaticamente mensagens longas sem descartar o restante e desenha acentos e cedilha na fonte compacta do display.
 - **Personalidade, Frequência e Horários Ativos Configuráveis:** ajustáveis diretamente na aba **🧠 Cérebro Hermes & Personalidade** do painel web.
 
 ---
@@ -47,6 +47,6 @@ Se a SmallTV for ligada em um local onde nenhuma das redes Wi-Fi salvas (até 5 
 python tools/gzip_webui.py
 python -m platformio run -e smalltv
 
-# Enviar via Wi-Fi OTA
-curl.exe -X POST "http://10.0.15.235/update" -F "firmware=@.pio/build/smalltv/firmware.bin"
+# Enviar via Wi-Fi OTA (substitua pelo IP exibido no painel do DhexterBot)
+curl.exe -X POST "http://<IP-DO-PET>/update" -F "firmware=@.pio/build/smalltv/firmware.bin"
 ```
